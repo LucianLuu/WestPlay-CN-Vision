@@ -16,18 +16,17 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_MOUSE_EVENT_KIND, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS, COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
     COREWEBVIEW2_PROCESS_FAILED_KIND, COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
-    COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE, CreateCoreWebView2EnvironmentWithOptions,
-    ICoreWebView2, ICoreWebView2_2, ICoreWebView2_3, ICoreWebView2CompositionController, ICoreWebView2Controller,
-    ICoreWebView2Controller2, ICoreWebView2Controller3, ICoreWebView2Controller4, ICoreWebView2Environment,
-    ICoreWebView2Environment3,
-    ICoreWebView2EnvironmentOptions, ICoreWebView2Settings2, ICoreWebView2Settings5, ICoreWebView2Settings6,
+    COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+    CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2_2, ICoreWebView2_3,
+    ICoreWebView2CompositionController, ICoreWebView2Controller, ICoreWebView2Controller2, ICoreWebView2Controller3,
+    ICoreWebView2Controller4, ICoreWebView2Environment, ICoreWebView2Environment3, ICoreWebView2EnvironmentOptions,
+    ICoreWebView2Settings2, ICoreWebView2Settings5, ICoreWebView2Settings6,
 };
 use webview2_com::{
     AddScriptToExecuteOnDocumentCreatedCompletedHandler, CoTaskMemPWSTR, CoreWebView2EnvironmentOptions,
     CreateCoreWebView2CompositionControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
     DocumentTitleChangedEventHandler, NavigationStartingEventHandler, NewWindowRequestedEventHandler,
-    ProcessFailedEventHandler,
-    WebMessageReceivedEventHandler,
+    ProcessFailedEventHandler, WebMessageReceivedEventHandler, WebResourceRequestedEventHandler,
 };
 use windows::System::DispatcherQueueController;
 use windows::UI::Composition::{Compositor, ContainerVisual, Visual};
@@ -959,6 +958,50 @@ impl OffscreenWebView {
     /// (the map's tiles, fetched by MapLibre's worker from the cabin page).
     pub fn map_folder_to_any_page(&self, host_name: &str, folder: &Path) -> windows::core::Result<()> {
         self.serve(host_name, folder, true)
+    }
+
+    /// Serves embedded assets from `lookup` at `https://{host_name}/` via WebView2's `WebResourceRequested`,
+    /// avoiding a duplicate `ui/` copy on disk alongside the embedded Tauri frontend assets.
+    pub fn serve_assets(&self, host_name: &str, lookup: crate::AssetLookup) -> windows::core::Result<()> {
+        use windows::Win32::UI::Shell::SHCreateMemStream;
+
+        let prefix = format!("https://{host_name}/");
+        let filter = HSTRING::from(format!("{prefix}*"));
+        let env = self.environment.clone();
+        // SAFETY: the WebView is alive as long as `self`; `filter` lives through the call.
+        unsafe { self.webview.AddWebResourceRequestedFilter(&filter, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)? };
+
+        let handler = WebResourceRequestedEventHandler::create(Box::new(move |_webview, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut uri = PWSTR::null();
+            // SAFETY: `args` and its `Request` are alive through the callback; WebView2 writes a CoTaskMem
+            // string into `uri`, freed by `CoTaskMemPWSTR`.
+            let uri = unsafe {
+                let request = args.Request()?;
+                request.Uri(&mut uri)?;
+                CoTaskMemPWSTR::from(uri).to_string()
+            };
+            let Some(rest) = uri.strip_prefix(&prefix) else { return Ok(()) };
+            let path = rest.split(['?', '#']).next().unwrap_or("");
+            let path = if path.is_empty() { "index.html" } else { path };
+
+            // SAFETY: `env` and `args` are valid COM interfaces on this STA thread; `SHCreateMemStream` returns
+            // an owned `IStream` (or `None` on OOM) whose bytes are copied before the call returns.
+            unsafe {
+                let response = if let Some(asset) = lookup(path) {
+                    let stream = SHCreateMemStream(Some(&asset.bytes));
+                    let headers = HSTRING::from(format!("Content-Type: {}", asset.mime_type));
+                    env.CreateWebResourceResponse(stream.as_ref(), 200, w!("OK"), &headers)?
+                } else {
+                    env.CreateWebResourceResponse(None, 404, w!("Not Found"), w!(""))?
+                };
+                args.SetResponse(Some(&response))?;
+            }
+            Ok(())
+        }));
+        let mut token = 0;
+        // SAFETY: the handler and the token are locals for the call; WebView2 keeps its own reference.
+        unsafe { self.webview.add_WebResourceRequested(&handler, &mut token) }
     }
 
     fn serve(&self, host_name: &str, folder: &Path, any_page: bool) -> windows::core::Result<()> {

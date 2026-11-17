@@ -607,16 +607,28 @@ fn start_host(
     Ok(Host { stop, thread: Some(thread) })
 }
 
-/// The cabin page: from the Vite dev server while developing, from the bundled UI otherwise.
+/// The cabin page: from the Vite dev server while developing, otherwise from Tauri's embedded frontend assets
+/// (without duplicating `ui/` on disk or letting stale `ui/` folders shadow a new release).
 fn cabin_content(app: &AppHandle) -> Content {
     if cfg!(debug_assertions)
         && let Some(dev_url) = &app.config().build.dev_url
     {
         return Content::Url(format!("{}cabin.html", dev_url.as_str()));
     }
-    let bundled =
-        app.path().resource_dir().map(|dir| dir.join("ui")).ok().filter(|dir| dir.join("cabin.html").exists());
+    if app.asset_resolver().get("cabin.html".into()).is_some() {
+        let handle = app.clone();
+        let lookup: westplay_host::AssetLookup = Arc::new(move |path| {
+            let asset = handle.asset_resolver().get(path.into())?;
+            Some(westplay_host::Asset { bytes: asset.bytes.to_vec(), mime_type: asset.mime_type })
+        });
+        return Content::Assets { lookup, page: "cabin.html".into() };
+    }
+    if let Ok(dir) = app.path().resource_dir().map(|dir| dir.join("ui"))
+        && dir.join("cabin.html").exists()
+    {
+        return Content::Folder { root: dir, page: "cabin.html".into() };
+    }
     // Unbundled release builds (`cargo build --release`) use the UI build next to the sources.
-    let root = bundled.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui/dist"));
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui/dist");
     Content::Folder { root, page: "cabin.html".into() }
 }

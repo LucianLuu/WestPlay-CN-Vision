@@ -45,10 +45,6 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "resources": {
-      "../ui/dist/": "ui/",
-      "../assets/westplay.scs": "westplay.scs"
-    },
     "windows": {
       "nsis": {
         "languages": [

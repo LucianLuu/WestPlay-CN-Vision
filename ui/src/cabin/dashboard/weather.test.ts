@@ -7,14 +7,20 @@ const midnight = 0
 
 describe('weatherView', () => {
   it('says the weather where the truck is, with its symbol', () => {
-    expect(weatherView({ now: 'clear', coming: 'clear' }, noon, 'Taranto', stringsFor('en_gb'))).toEqual({
+    expect(weatherView({ now: 'clear', coming: 'clear' }, noon, 'Taranto', stringsFor('en_us'))).toEqual({
       place: 'Taranto',
       condition: 'Clear',
       symbol: 'sun',
     })
+    expect(weatherView({ now: 'rain', coming: 'rain' }, noon, 'Taranto', stringsFor('zh_cn'))).toEqual({
+      place: 'Taranto',
+      condition: '雨',
+      symbol: 'rain',
+    })
+    // Unsupported languages fall back to en_us.
     expect(weatherView({ now: 'rain', coming: 'rain' }, noon, 'Taranto', stringsFor('tr_tr'))).toEqual({
       place: 'Taranto',
-      condition: 'Yağmur',
+      condition: 'Rain',
       symbol: 'rain',
     })
   })

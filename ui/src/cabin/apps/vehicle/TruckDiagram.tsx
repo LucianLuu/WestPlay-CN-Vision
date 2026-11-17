@@ -37,7 +37,7 @@ export function truckPicture(truck: TruckInfo | null): string | null {
   if (id === '') return null
   // The game's id, exactly; a model whose id carries a suffix (`vehicle.ford.f150_2023`) still finds its own.
   const key = Object.keys(PICTURES).find((each) => id === each || id.startsWith(each + '_') || id.startsWith(each + '.'))
-  return key ? `/icons/vehicles/${PICTURES[key]}.png` : null
+  return key ? `/icons/vehicles/${PICTURES[key]}.webp` : null
 }
 
 /**

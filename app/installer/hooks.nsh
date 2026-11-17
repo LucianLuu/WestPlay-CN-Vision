@@ -167,3 +167,10 @@ FunctionEnd
     Abort "WebView2 Runtime: missing or damaged"
   ${EndIf}
 !macroend
+
+; Remove legacy on-disk ui/ and westplay.scs left by older versions when upgrading in place:
+; the UI is now served directly from embedded assets inside westplay.exe.
+!macro NSIS_HOOK_POSTINSTALL
+  RMDir /r "$INSTDIR\ui"
+  Delete "$INSTDIR\westplay.scs"
+!macroend

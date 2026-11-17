@@ -76,12 +76,26 @@ pub use westplay_shared::{SCREEN_HEIGHT, SCREEN_WIDTH};
 pub const TEST_PAGE: &str = include_str!("test_page.html");
 
 #[derive(Clone)]
+pub struct Asset {
+    pub bytes: Vec<u8>,
+    pub mime_type: String,
+}
+
+pub type AssetLookup = std::sync::Arc<dyn Fn(&str) -> Option<Asset> + Send + Sync>;
+
+#[derive(Clone)]
 pub enum Content {
     Url(String),
     Html(String),
     /// A built UI folder, served at `https://westplay.cabin/` through a WebView2 virtual host.
     Folder {
         root: PathBuf,
+        page: String,
+    },
+    /// Embedded UI assets (from Tauri's `AssetResolver`), served at `https://westplay.cabin/` via
+    /// WebView2's `WebResourceRequested` without duplicating `ui/dist/` on disk.
+    Assets {
+        lookup: AssetLookup,
         page: String,
     },
 }
@@ -358,13 +372,17 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             webview.map_folder("westplay.cabin", root)?;
             webview.navigate(&format!("https://westplay.cabin/{page}"))?;
         }
+        Content::Assets { lookup, page } => {
+            webview.serve_assets("westplay.cabin", lookup.clone())?;
+            webview.navigate(&format!("https://westplay.cabin/{page}"))?;
+        }
     }
     startup::mark("host: cabin page requested");
     // What WestPlay costs while the game runs, in the log each minute (performance.rs).
     let mut meter = performance::Meter::new(match &config.content {
         Content::Url(url) => performance::host_of(url).unwrap_or_default(),
         Content::Html(_) => String::new(),
-        Content::Folder { .. } => "westplay.cabin".to_string(),
+        Content::Folder { .. } | Content::Assets { .. } => "westplay.cabin".to_string(),
     });
     // The player's maps, built from their game (maps.rs), for the cab's Maps app.
     let maps_dir = config.data_dir.join("maps");

@@ -32,10 +32,8 @@ describe('appIcon', () => {
         expect(FILES).toContain(appIcon(role, look))
       }
     }
-      // The music services' and Bilibili's own marks are one PNG each (icons.ts, PICTURES): the same
-      // file in both looks. Every other role is WestPlay's own drawing, light and dark.
-      expect(appIcon('youtubeMusic', 'dark')).toBe(appIcon('youtubeMusic', 'light'))
-      expect(appIcon('youtubeMusic', 'light')).toMatch(/\.png$/)
+      expect(appIcon('youtubeMusic', 'dark')).not.toBe(appIcon('youtubeMusic', 'light'))
+      expect(appIcon('youtubeMusic', 'light')).toMatch(/\.svg$/)
       expect(appIcon('safari', 'dark')).not.toBe(appIcon('safari', 'light'))
   })
 })
