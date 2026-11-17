@@ -1,0 +1,74 @@
+/* QQ shell overrides. The capsule lays its tab bar and search field out with measured inline
+   left/width/clipPath (barLayout.ts, via the QQ app's own useBar), so it keeps Music app's absolute
+   positioning; only the key colour is replaced here. */
+
+/* QQ Music's green replaces Apple Music's red as the key colour: #29BD71, the value the owner settled
+   on, in both looks (owner 2026-11-16: the mark's own #00EB81 read at 1.4:1 on a light panel and was
+   hard on the eyes; this one reads at 2.2:1 there and at 7:1 on a dark one, a calmer green that keeps
+   the look).
+
+   The light rule is written out with `.shell`, because Apple Music's own
+   `.shell.appearance-light .am-app` rule (music/appleMusic.css) outranks a bare `.shell .qq-app`. */
+.shell .qq-app {
+  --am-key: #29bd71;
+  --am-key-fill: rgb(41 189 113 / 0.16);
+}
+
+.shell.appearance-light .qq-app {
+  --am-key: #29bd71;
+  --am-key-fill: rgb(41 189 113 / 0.16);
+}
+
+/* Hot search terms: wrapped pill tags under the search field. */
+.shell .am-hotkeys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.shell .am-hotkey {
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--am-key-fill);
+  color: var(--am-key);
+  font-size: calc(22px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.shell .am-hotkey:active {
+  scale: 0.97;
+}
+
+/* Mine: signed-out sign-in card and the scan QR code. */
+.shell .am-mine-signin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 60px 32px;
+  text-align: center;
+}
+
+.shell .am-mine-signin h2 {
+  font-size: calc(28px * var(--text-scale, 1));
+  font-weight: 700;
+}
+
+.shell .am-mine-signin p {
+  color: var(--am-dim, #8e8e93);
+}
+
+.shell .am-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.shell .am-qr img {
+  width: 300px;
+  height: 300px;
+  border-radius: 20px;
+  background: #fff;
+  object-fit: contain;
+}

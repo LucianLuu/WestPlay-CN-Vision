@@ -1,0 +1,88 @@
+/* The Performance Mode (Settings › Display & Performance, `state/store.ts`): the effects the screen gives up
+   on a lesser machine. A class on <html> (CabinApp.tsx, as the demo's own class is), so it reaches everything
+   the cabin page draws, the icons and menus portalled out of the shell included.
+
+   What goes, and where:
+   1. the map's raised buildings — the map's own to put away, and its heaviest drawing (maps/buildings.ts);
+   2. the frosted glass — every blur dropped, and the glass left a plain translucent colour of the look's own
+      (dark or light), as iOS's Reduce Transparency does it;
+   3. the animations and transitions — every one of them over at once, so a screen is where it was going to
+      end up (an animation's `both` fill keeps its last frame, and its `animationend` still comes, which the
+      screens' switches wait for: CabinApp.tsx `Screens`). */
+
+/* --- 2. The glass, flat --------------------------------------------------------------------------------- */
+
+/* No blur anywhere: the glass panels, the labels under the icons, the keyboard, the volume pill, the bar that
+   fades under a scroll — and a View Transition's own glass, which is a pseudo-element of <html>. */
+html.performance *,
+html.performance *::before,
+html.performance *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.performance::view-transition-group(sidebar) {
+  backdrop-filter: none !important;
+}
+
+/* The colours the glass is painted in, opaque enough to read on with nothing blurred behind them: the
+   screen's own look first, dark as it comes (`shell.css`). */
+html.performance .shell {
+  --glass: rgb(28 30 36 / 0.86);
+  --glass-rim: rgb(255 255 255 / 0.16);
+  --chip: rgb(16 17 21 / 0.86);
+  --keyboard-glass: rgb(24 26 32 / 0.94);
+}
+
+html.performance .shell.appearance-light {
+  --glass: rgb(245 246 250 / 0.9);
+  --glass-rim: rgb(255 255 255 / 0.8);
+  --chip: rgb(250 250 253 / 0.9);
+  --keyboard-glass: rgb(238 240 245 / 0.95);
+}
+
+/* The frostings of their own: see-through enough to have wanted the blur behind them. */
+html.performance .wx-card {
+  background: rgb(8 24 52 / 0.62);
+}
+
+html.performance .yt-glass {
+  background: rgb(0 0 0 / 0.62);
+}
+
+html.performance .appearance-dark .weather,
+html.performance .appearance-dark .job {
+  --glass: rgb(16 18 24 / 0.82);
+}
+
+/* The blurred art behind Now Playing, Music and the web app's wall: the largest blurs the page has, and only
+   decoration. Their veils stay, so what's behind them is a plain colour of the look's own. */
+html.performance .now-playing .np-tint img,
+html.performance .music-backdrop img,
+html.performance .wal-cover {
+  display: none;
+}
+
+/* --- 3. The animations ---------------------------------------------------------------------------------- */
+
+/* Every animation runs in no time at all (its last frame kept where it fills both ways) and every transition
+   is over before it starts; an endless one — a spinner, the raining sky, a breathing glow — runs its one pass
+   and stops, rather than repainting for as long as the screen is up. */
+html.performance *,
+html.performance *::before,
+html.performance *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* The View Transitions' own animations (shell/transitions.css): the change lands at once. */
+html.performance::view-transition-group(*),
+html.performance::view-transition-old(*),
+html.performance::view-transition-new(*) {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+}

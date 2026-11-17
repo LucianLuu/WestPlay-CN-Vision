@@ -1,0 +1,469 @@
+/* The Vehicle app: the truck's condition as a car's trip computer shows it (apps/vehicle/VehicleApp.tsx).
+   Two columns on the page's own background: the truck drawn from above with its readings under it at the left,
+   the fuel, the rest and the condition at the right. Apple's grouped look: rounded cards on the page. */
+.vehicle-app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+  padding: 2px;
+  overflow: hidden;
+  color: var(--apple-label);
+}
+
+.veh-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.veh-main {
+  min-height: 0;
+}
+
+/* The right column is as tall as its cards need, never stretched: the fuel, the rest, the cargo, the whole
+   condition, each its own card on the page (as Apple's grouped lists are). */
+.veh-side {
+  justify-content: flex-start;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+/* The condition card gives way before the cards above it: it's the one with room to scroll. */
+.veh-conditions-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.veh-conditions-card::-webkit-scrollbar {
+  display: none;
+}
+
+.veh-conditions-card .veh-kicker {
+  position: sticky;
+  top: 0;
+}
+
+.veh-side::-webkit-scrollbar {
+  display: none;
+}
+
+.veh-card {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: var(--apple-card);
+}
+
+.veh-kicker {
+  margin: 0;
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 640;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--apple-label-secondary);
+}
+
+/* ── The status card: the truck, drawn from above, and whether anything is wrong ─────────────────────────── */
+
+.veh-status-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 10px;
+}
+
+.veh-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+}
+
+/* The check or the exclamation beside the verdict, in a disc. */
+.veh-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+.veh-check.good {
+  background: var(--apple-green);
+}
+
+.veh-check.warn {
+  background: var(--apple-orange);
+}
+
+.veh-statusword {
+  font-size: calc(19px * var(--text-scale, 1));
+  font-weight: 620;
+}
+
+.veh-statusword.good {
+  color: var(--apple-green);
+}
+
+.veh-statusword.warn {
+  color: var(--apple-orange);
+}
+
+/* The truck itself, from the game's own model (apps/vehicle/TruckDiagram.tsx): the picture the modeller shot,
+   nose up, turned so the truck lies across the card as a car's own diagram does.
+
+   The turn is a transform, so the box the picture takes is still the file's own (portrait). The wrapper is
+   given the turned picture's box (as wide as the file is tall, and the other way round) and the picture is
+   turned inside it, centred: that way the card lays out the shape that is actually seen. */
+.veh-truck {
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 2px 0;
+  padding: 0;
+}
+
+.veh-truck-box {
+  /* The card's own room, and the picture centred in it: the files stand nose up, taller than they are wide, and the
+     box takes whatever shape the card leaves rather than one of its own — the picture is fitted inside by its own
+     `object-fit` (owner 2026-11-11: 车头朝上, 不要超过卡片, 居中). */
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.veh-truck-image {
+  /* The files are shot nose up already, so the picture stands as it is: no turn at all (owner 2026-11-11: 车头朝上,
+     and the first drawing's quarter turn was wrong for the card they had in mind). Sized well inside the card's box
+     and centred in it by the box that holds it: at nine tenths the picture ran past the screen's own edge on the
+     player's display (owner 2026-11-11: 超出屏幕了, 再缩小 30%), so it is two thirds of that. */
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
+  /* Lifted by a share of its own height: `padding` on the box moved its centre but the picture's own `height: 64%`
+     shrank with it, so the two cancelled and nothing moved on the screen (owner 2026-11-11: 还是没变, measured at
+     0 px). A transform moves the picture and nothing else, so the gap the card leaves above it — the model's name
+     and the card's own padding stand under it — can be taken out exactly. */
+  transform: translateY(-14.2%);
+  filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.3));
+}
+
+/* A truck WestPlay has no picture of: the card says its name instead, rather than another truck's likeness. */
+.veh-no-picture {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  margin: 0;
+  font-size: calc(20px * var(--text-scale, 1));
+  font-weight: 600;
+  color: var(--apple-label-tertiary);
+}
+
+.veh-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--apple-label-secondary);
+}
+
+.veh-caption-brand {
+  font-weight: 560;
+}
+
+.veh-caption-trailer::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--apple-label-tertiary);
+}
+
+/* ── The four readings under the truck: fuel, brake air, AdBlue, coolant ─────────────────────────────────── */
+
+.veh-readings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.veh-reading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: var(--apple-card);
+}
+
+.veh-reading-name {
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 520;
+  color: var(--apple-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.veh-reading-value {
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.veh-reading-hint {
+  font-size: calc(11px * var(--text-scale, 1));
+  color: var(--apple-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The fuel card: the tank as a ring, and how far it goes ───────────────────────────────────────────────── */
+
+.veh-fuel-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.veh-gauge {
+  flex: none;
+  width: 88px;
+  height: 54px;
+}
+
+.veh-gauge-track {
+  fill: none;
+  stroke: var(--apple-fill-tertiary);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.veh-gauge-fill {
+  fill: none;
+  stroke: var(--apple-green);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.veh-gauge-fill.warn {
+  stroke: var(--apple-orange);
+}
+
+.veh-gauge-fill.bad {
+  stroke: var(--apple-red);
+}
+
+.veh-gauge-fill.unknown {
+  stroke: var(--apple-gray-3);
+}
+
+.veh-fuel-figures {
+  min-width: 0;
+}
+
+.veh-fuel-amount {
+  margin: 0;
+  font-size: calc(26px * var(--text-scale, 1));
+  font-weight: 680;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.veh-unit {
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 560;
+  color: var(--apple-label-secondary);
+}
+
+.veh-fuel-range {
+  margin: 2px 0 0;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--apple-label-secondary);
+}
+
+.veh-fuel-share {
+  margin: 1px 0 0;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--apple-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The rest card ───────────────────────────────────────────────────────────────────────────────────────── */
+
+.veh-rest-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 0;
+}
+
+.veh-rest-clock {
+  font-size: calc(22px * var(--text-scale, 1));
+  font-weight: 660;
+  font-variant-numeric: tabular-nums;
+}
+
+.veh-rest-word {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--apple-label-secondary);
+}
+
+.veh-rest-off {
+  margin: 3px 0 0;
+  font-size: calc(14px * var(--text-scale, 1));
+  color: var(--apple-label-tertiary);
+}
+
+/* ── The cargo card ──────────────────────────────────────────────────────────────────────────────────────── */
+
+.veh-cargo-name {
+  margin: 4px 0 0;
+  font-size: calc(17px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.veh-cargo-mass {
+  margin: 1px 0 0;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--apple-label-secondary);
+}
+
+/* ── The condition as a whole ────────────────────────────────────────────────────────────────────────────── */
+
+.veh-overall-card {
+  margin-top: 0;
+}
+
+.veh-overall {
+  margin: 4px 0 0;
+  font-size: calc(18px * var(--text-scale, 1));
+  font-weight: 620;
+}
+
+.veh-overall.good {
+  color: var(--apple-green);
+}
+
+.veh-overall.warn {
+  color: var(--apple-orange);
+}
+
+.veh-overall.bad {
+  color: var(--apple-red);
+}
+
+.veh-overall.unknown {
+  color: var(--apple-label-tertiary);
+}
+
+.veh-odometer {
+  margin: 1px 0 0;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--apple-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.veh-waiting {
+  margin: auto;
+  font-size: calc(19px * var(--text-scale, 1));
+  color: var(--apple-label-secondary);
+}
+
+/* ── The condition card: each part the game reports, its damage and a bar ────────────────────────────────── */
+
+.veh-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.veh-conditions-kicker {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--apple-separator);
+}
+
+.veh-condition {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name value'
+    'bar bar';
+  gap: 3px 10px;
+  align-items: baseline;
+}
+
+.veh-condition-name {
+  grid-area: name;
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 540;
+}
+
+.veh-condition-value {
+  grid-area: value;
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 560;
+  color: var(--apple-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.veh-condition.good .veh-condition-value {
+  color: var(--apple-green);
+}
+
+.veh-condition.warn .veh-condition-value {
+  color: var(--apple-orange);
+}
+
+.veh-condition.bad .veh-condition-value {
+  color: var(--apple-red);
+}
+
+.veh-condition-bar {
+  grid-area: bar;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--apple-fill-tertiary);
+}
+
+.veh-condition-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--apple-green);
+}
+
+.veh-condition.warn .veh-condition-bar > span {
+  background: var(--apple-orange);
+}
+
+.veh-condition.bad .veh-condition-bar > span {
+  background: var(--apple-red);
+}
+
+.veh-condition.unknown .veh-condition-bar > span {
+  background: var(--apple-gray-3);
+}

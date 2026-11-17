@@ -1,0 +1,386 @@
+/* The web app: a streaming site's own page, whole. The page is the host's WebView, under the cabin page where
+   this one is cut open (Shell.tsx, `hole`); the bar above it is this page's (apps/web/WebApp.tsx). */
+
+.webapp {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The bar: the site, the page's own title (the song or video playing), and its controls. */
+.webapp-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  padding: 0 2px 12px;
+}
+
+.webapp-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease,
+    scale 140ms ease;
+}
+
+.webapp-button:hover {
+  background: var(--glass);
+}
+
+.webapp-button:active {
+  scale: 0.92;
+}
+
+.webapp-button:disabled {
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.webapp-button svg {
+  width: 25px;
+  height: 25px;
+}
+
+.webapp-now {
+  flex: 1;
+  min-width: 0;
+  padding-right: 6px;
+}
+
+.webapp-site {
+  font-size: calc(12px * var(--text-scale, 1));
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.webapp-title {
+  overflow: hidden;
+  font-size: calc(21px * var(--text-scale, 1));
+  font-weight: 620;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Where the site shows through: the host places its WebView at exactly this rectangle. The page has nothing of
+   its own there, and takes no input: the host sends the mouse to the site (crates/host/src/pointer.rs). */
+.webapp-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  pointer-events: none;
+}
+
+/* A site's page the first time it opens: a solid background of the theme's over the hole, until its page
+   has drawn (apps/web/webapp.ts useWebAppCover). It's this page's own pixels there, so the site's
+   unfinished page doesn't show through; inside the app window, it moves and rounds with it. */
+.webapp-cover {
+  position: absolute;
+  inset: 0;
+  background: var(--apple-background);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.webapp-cover.shown {
+  opacity: 1;
+}
+
+/* A plain browser has no host to show the site in: what it is, and where it opens. */
+.webapp-preview {
+  position: absolute;
+  inset: 64px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 72px;
+  text-align: center;
+}
+
+.webapp-preview-name {
+  font-size: calc(30px * var(--text-scale, 1));
+  font-weight: 660;
+}
+
+.webapp-preview p {
+  max-width: 620px;
+  margin: 0;
+  font-size: calc(19px * var(--text-scale, 1));
+  font-weight: 480;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* A video of the page's gone full screen (the page says so, the host passes it on): this app takes the whole
+   CarPlay area, its bar out of the way, and the page cuts the cabin page open all over it — the way YouTube's own
+   player does (youtube.css `.yt-player`). The truck's OEM strip and the sidebar are where they were. */
+.webapp.full-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+.webapp.full-screen .webapp-bar {
+  display: none;
+}
+
+.webapp.full-screen .webapp-page {
+  border-radius: 0;
+}
+
+/* --- The web app's words, whole ----------------------------------------------------------------- */
+
+/* The dashboard's Now Playing, its lyrics button pressed: the site's song and its words over the screen, the
+   cover blurred behind them (LyricsPage.tsx). Dark in either look: the words are read the way Apple's lyrics
+   are, the line sung lit and kept a third of the way down. */
+.wal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  overflow: hidden;
+  border-radius: var(--panel-radius);
+  background: #0a0a0b;
+  color: rgb(255 255 255 / 0.92);
+  animation: wal-in 240ms ease both;
+}
+
+.wal-cover {
+  position: absolute;
+  inset: -12%;
+  width: 124%;
+  height: 124%;
+  object-fit: cover;
+  filter: blur(70px) saturate(1.3) brightness(0.45);
+  opacity: 0.85;
+}
+
+.wal-panel {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 4vh 4vw;
+}
+
+.wal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+/* The words at the left, the song's cover beside them (what the page plays, its own picture). */
+.wal-body {
+  display: flex;
+  flex: 1;
+  gap: 4%;
+  min-height: 0;
+  padding-top: 2vh;
+}
+
+.wal-words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The cover and its three buttons, one group in the middle of the column (Now Playing's own arrangement). */
+.wal-art {
+  display: flex;
+  flex: 0 0 32%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vh;
+  min-height: 0;
+}
+
+.wal-art img {
+  width: 100%;
+  max-height: 44vh;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 20px;
+  box-shadow: 0 30px 70px rgb(0 0 0 / 0.5);
+}
+
+.wal-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: rgb(255 255 255 / 0.12);
+  cursor: pointer;
+}
+
+.wal-close:active {
+  background: rgb(255 255 255 / 0.26);
+}
+
+.wal-song {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.wal-site {
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 640;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.wal-title {
+  overflow: hidden;
+  font-size: calc(28px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wal-by {
+  font-size: calc(18px * var(--text-scale, 1));
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.wal-lyrics {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6vh 0 12vh;
+  scrollbar-width: none;
+}
+
+.wal-lyrics::-webkit-scrollbar {
+  display: none;
+}
+
+.wal-lyrics .lyric {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: calc(30px * var(--text-scale, 1));
+  font-weight: 650;
+  line-height: 1.3;
+  text-align: left;
+  color: rgb(255 255 255 / 0.32);
+  transition: color 220ms ease, transform 220ms ease;
+  cursor: pointer;
+}
+
+.wal-lyrics .lyric.sung {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.wal-lyrics .lyric.now {
+  color: #fff;
+  transform: translateX(6px);
+}
+
+.wal-lyrics .lyric.stanza {
+  margin-top: 26px;
+}
+
+/* The page's own player's three keys, under its cover. */
+.wal-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7%;
+  width: 100%;
+}
+
+.wal-transport button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: rgb(255 255 255 / 0.14);
+  transition: background-color 180ms ease, scale 180ms ease;
+  cursor: pointer;
+}
+
+.wal-transport button:nth-child(2) {
+  width: 68px;
+  height: 68px;
+  background: rgb(255 255 255 / 0.22);
+}
+
+.wal-transport button:active {
+  scale: 0.96;
+  background: rgb(255 255 255 / 0.3);
+}
+
+/* The page's own sound's volume, under the three keys: short and native (a control, not the song's progress
+   bar). */
+.wal-volume {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 74%;
+  margin-top: 0.5vh;
+}
+
+.wal-speaker {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: rgb(255 255 255 / 0.75);
+}
+
+.wal-volume input[type='range'] {
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  accent-color: #fff;
+  background: transparent;
+  cursor: pointer;
+}
+
+.wal-none {
+  margin: 0;
+  font-size: calc(20px * var(--text-scale, 1));
+  color: rgb(255 255 255 / 0.6);
+}
+
+@keyframes wal-in {
+  from {
+    opacity: 0;
+  }
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>音乐播放器</title>
+<link rel="stylesheet" href="player.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="side-hd">我的音乐</div>
+      <nav class="side-nav">
+        <a class="side-item on" id="nav-like" href="#" data-key="like"><span class="nm">❤ 我喜欢</span></a>
+      </nav>
+
+      <div class="side-hd">
+        <span>创建的歌单</span>
+        <button class="mini plus" id="new-pl" title="新建歌单">＋</button>
+      </div>
+      <nav class="side-nav" id="nav-mine"></nav>
+
+      <div class="side-hd"><span>收藏的歌单</span></div>
+      <nav class="side-nav" id="nav-fav"></nav>
+
+      <div class="side-hd"><span>收藏的专辑</span></div>
+      <nav class="side-nav" id="nav-album"></nav>
+
+      <!-- 只在出问题时才显示（平时整块隐藏，保持干净） -->
+      <div id="status-wrap" hidden>
+        <div class="side-hd"><span>状态</span></div>
+        <div class="side-note" id="side-note"></div>
+      </div>
+    </aside>
+
+    <section class="center">
+      <header class="bar">
+        <h1 id="list-name">我喜欢</h1>
+        <span class="count" id="count"></span>
+        <span id="ver" class="ver" title="扩展版本号（重载后变了说明跑的是新代码）"></span>
+        <input id="q" class="search" type="search" placeholder="搜索 歌曲 / 歌手 / 专辑" autocomplete="off">
+        <button id="q-go" class="ghost" title="搜索整个 QQ 音乐曲库（也可按回车）">搜索</button>
+        <button id="auth" class="ghost" title="登录 / 退出登录 QQ 音乐">登录</button>
+        <a id="site" class="site" href="#" title="打开 QQ音乐网页版（不会被自动替换）">网页版</a>
+      </header>
+
+      <main id="list" class="list">
+        <div class="row head">
+          <span class="c-idx">#</span><span class="c-title">标题</span>
+          <span class="c-singer">歌手</span><span class="c-album">专辑</span><span class="c-time">时长</span><span class="c-act"></span>
+        </div>
+        <div id="rows"></div>
+        <div id="tip" class="tip">正在读取…</div>
+      </main>
+    </section>
+  </div>
+
+  <footer class="player">
+    <div class="np">
+      <div class="cover"><span id="np-cover-txt">♪</span><img id="np-cover" alt="" hidden></div>
+      <div class="np-txt">
+        <div id="np-name" class="np-name">未在播放</div>
+        <div id="np-singer" class="np-singer"></div>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="btns">
+        <button id="prev" title="上一首">⏮</button>
+        <button id="play" class="main" title="播放/暂停">▶</button>
+        <button id="next" title="下一首">⏭</button>
+      </div>
+      <div class="prog">
+        <span id="t-cur">00:00</span>
+        <input id="seek" type="range" min="0" max="1000" value="0" step="1">
+        <span id="t-all">00:00</span>
+      </div>
+    </div>
+    <div class="right">
+      <button id="like-cur" title="喜欢 / 取消喜欢正在播放的歌">❤</button>
+      <button id="mode" title="播放模式">🔁</button>
+      <button id="mute" title="静音">🔊</button>
+      <input id="vol" type="range" min="0" max="100" value="80">
+    </div>
+  </footer>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-hd" id="modal-title">选择歌单</div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-ft"><button id="modal-cancel" class="ghost">取消</button></div>
+    </div>
+  </div>
+
+  <div id="busy" class="busy" hidden><span class="spin"></span><span id="busy-txt">加载中…</span></div>
+  <div id="toast" class="toast" hidden></div>
+  <audio id="audio" preload="none"></audio>
+  <script src="player.js"></script>
+</body>
+</html>

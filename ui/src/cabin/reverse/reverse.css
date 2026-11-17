@@ -1,0 +1,378 @@
+/* The reversing camera (FIXES §35): the whole cab screen is the monitor while reversing — a camera's picture is
+   never white, so this keeps its own dark look whatever the appearance. Above the screens (30), below the cursor
+   (40) and the screen's own edge (50). */
+.rev {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px 18px;
+  background: radial-gradient(120% 90% at 50% 0%, #10141a 0%, #05060a 70%);
+  color: #e9eef4;
+  font-variant-numeric: tabular-nums;
+}
+
+.rev-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: calc(17px * var(--text-scale, 1));
+  letter-spacing: 0.02em;
+}
+
+.rev-gear {
+  min-width: 2.4em;
+  padding: 2px 12px;
+  border-radius: 10px;
+  background: #d8e3ef;
+  color: #0a0d12;
+  font-weight: 700;
+  text-align: center;
+}
+
+.rev-speed {
+  font-weight: 600;
+}
+
+.rev-name {
+  opacity: 0.8;
+}
+
+.rev-trailer {
+  margin-left: auto;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.72;
+}
+
+/* The gear at the bar's right end (layout.ts): the camera's five layouts, chosen and kept. A touch screen, so
+   the button is a full 48 px whatever the text size. */
+.rev-settings {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.14);
+  color: inherit;
+  cursor: pointer;
+}
+
+.rev-settings:active,
+.rev-settings[aria-expanded='true'] {
+  background: rgb(255 255 255 / 0.24);
+}
+
+.rev-settings svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+/* Its menu, over the picture under the bar's right end: a dark sheet with the five layouts, the chosen one lit
+   and ticked. It floats above the views, which stay drawn behind it. */
+.rev-menu {
+  position: absolute;
+  top: 72px;
+  right: 20px;
+  z-index: 2;
+  width: 320px;
+  max-width: calc(100% - 40px);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 18px;
+  border: 1px solid rgb(255 255 255 / 0.15);
+  background: rgb(18 22 28 / 0.97);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 0.55);
+}
+
+.rev-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: calc(17px * var(--text-scale, 1));
+  text-align: left;
+  cursor: pointer;
+}
+
+.rev-menu button[aria-pressed='true'] {
+  background: rgb(255 255 255 / 0.16);
+  font-weight: 650;
+}
+
+.rev-menu button:active {
+  background: rgb(255 255 255 / 0.24);
+}
+
+.rev-menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rev-menu-check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The views (layout.ts): the two side by side in `both`, the one filling the screen otherwise, the second in a
+   small window at the bottom right for the pip layouts. Grid, so two views still fill the height between the bar
+   and the warning. */
+.rev-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.rev-body-both {
+  grid-template-columns: 1fr 1fr;
+}
+
+.rev-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The floating window: a picture, not a control, so touches go through to the main view's screen. */
+.rev-pip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 30%;
+  max-width: 420px;
+  height: 34%;
+  max-height: 300px;
+  min-height: 96px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1.5px solid rgb(255 255 255 / 0.5);
+  background: #05070a;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+
+.rev-svg {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #05070a;
+}
+
+.rev-pip .rev-svg {
+  border-radius: 0;
+}
+
+/* The rear view's picture: the sky over the horizon, the ground, the road. */
+.rev-sky {
+  fill: #0b1119;
+}
+
+.rev-horizon {
+  stroke: rgb(150 175 200 / 0.28);
+  stroke-width: 1.4;
+}
+
+.rev-ground {
+  fill: #05070a;
+}
+
+.rev-road {
+  fill: #262b31;
+}
+
+.rev-skyline rect {
+  fill: #111925;
+}
+
+.rev-row {
+  stroke: rgb(220 232 245 / 0.22);
+  stroke-width: 1.4;
+  stroke-dasharray: 10 9;
+}
+
+.rev-row-text {
+  fill: rgb(232 240 250 / 0.62);
+  font-size: 13px;
+  font-weight: 600;
+  /* Over the road's own lines: a dark edge keeps it readable. */
+  paint-order: stroke;
+  stroke: rgb(12 15 20 / 0.9);
+  stroke-width: 3.5;
+}
+
+.rev-band {
+  opacity: 0.62;
+}
+
+.rev-band.rev-red {
+  fill: #e0453c;
+}
+
+.rev-band.rev-yellow {
+  fill: #e8c33a;
+}
+
+.rev-band.rev-green {
+  fill: #49b46a;
+}
+
+.rev-course {
+  fill: none;
+  stroke: rgb(232 240 250 / 0.72);
+  stroke-width: 2.2;
+  stroke-dasharray: 16 10;
+  stroke-linecap: round;
+}
+
+.rev-bumper {
+  fill: #14181e;
+}
+
+.rev-light {
+  fill: #b8342e;
+}
+
+.rev-vignette {
+  fill: url(#rev-vignette);
+  pointer-events: none;
+}
+
+/* The roof view's picture: the metre grid, the rig, and the band its tail sweeps. */
+.rev-grid line {
+  stroke: rgb(190 210 230 / 0.09);
+  stroke-width: 1;
+}
+
+.rev-grid line.rev-grid-major {
+  stroke: rgb(190 210 230 / 0.2);
+}
+
+.rev-cab {
+  fill: #2f6ea8;
+  stroke: #8fc2ec;
+  stroke-width: 2;
+}
+
+.rev-box {
+  fill: #39424d;
+  stroke: #93a4b6;
+  stroke-width: 2;
+}
+
+.rev-wheel {
+  fill: #0c0f13;
+  stroke: #5d6c7d;
+  stroke-width: 1.2;
+}
+
+.rev-fifth {
+  fill: none;
+  stroke: #c9d8e8;
+  stroke-width: 2;
+}
+
+.rev-centre {
+  stroke: rgb(220 232 245 / 0.18);
+  stroke-width: 1.2;
+  stroke-dasharray: 8 10;
+}
+
+.rev-swept {
+  fill: rgb(232 195 58 / 0.24);
+  stroke: rgb(232 195 58 / 0.6);
+  stroke-width: 1.6;
+  stroke-dasharray: 9 7;
+}
+
+.rev-swept-line {
+  fill: none;
+  stroke: rgb(232 195 58 / 0.85);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 6;
+}
+
+/* The yellow line every reversing camera carries (owner's own words, §35). */
+.rev-warning {
+  margin: 0;
+  color: #f5cd5c;
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* The game's own picture, in reverse (FIXES §91): the page steps aside whole, so what shows is what the engine
+   draws under it — the mod's park camera, over the screen (§35.1's exception). Out of sight rather than masked:
+   its children and its layer go with it, and nothing of the page is left over the picture but the bar. */
+.carplay.live-reverse {
+  visibility: hidden;
+}
+
+/* The bar and the warning over that picture, on a layer of their own: the CarPlay area they would otherwise
+   live in is out of sight with everything in it. The rest of it is see-through to the touch, so the game's
+   screen keeps what is pressed anywhere but on the bar's own controls. */
+.rev-over {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 20px 18px;
+  color: #e9eef4;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.rev-over .rev-bar,
+.rev-over .rev-menu,
+.rev-over .rev-warning {
+  pointer-events: auto;
+}
+
+/* Over a picture rather than over the camera's own dark sheet: the warning carries its own backing. */
+.rev-over .rev-warning {
+  align-self: center;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgb(8 10 14 / 0.55);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+}

@@ -1,0 +1,35 @@
+{
+   "action": {
+      "default_icon": {
+         "16": "icons/icon16.png",
+         "32": "icons/icon32.png"
+      },
+      "default_title": "打开音乐播放器"
+   },
+   "background": {
+      "service_worker": "background.js"
+   },
+   "content_scripts": [ {
+      "all_frames": false,
+      "js": [ "main.js" ],
+      "matches": [ "https://y.qq.com/*" ],
+      "run_at": "document_start",
+      "world": "MAIN"
+   } ],
+   "default_locale": "zh_CN",
+   "description": "__MSG_extDesc__",
+   "host_permissions": [ "*://*.y.qq.com/*", "*://*.qq.com/*" ],
+   "icons": {
+      "128": "icons/icon128.png",
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt5xwjS6//o8s8QlQQLCWKrZnRwxuAhPJ/DS8twXF8SUtjuy7fQPRlhNGYBV8afHqcSWTGCzSuuguUUIcOTtGy+6/9a7BZgqkx4hVUVe32gW1QSWjG7ZYF4vSlMWMNjJowVP8NSy8DMci0eX93/E1vPbALXixyUCA0/0C6InIQHv08tGRIGYRwmYUOzT3PDhvVZL1XQTSS1O8j22idtqMSikJSCTDGX6LRz/qg9XNgSogIjBZULJu0QPNCTEywUPikPZlyEhw+TizodEPI5z/k0Wp7lroy4Ascdhm80hpuAGyWShHyi85YnE63Q9fnZSUTkMCoeAd0le3nyq96JkODQIDAQAB",
+   "manifest_version": 3,
+   "name": "__MSG_extName__",
+   "permissions": [ "scripting", "tabs", "cookies", "storage" ],
+   "short_description": "QQ音乐网页版（非官方）全量歌单 + 简洁播放器：解除列表数量上限，内置播放器",
+   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
+   "version": "3.9.49"
+}
