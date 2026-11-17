@@ -14,6 +14,7 @@ import {
   postToHost,
 } from '../../../shared/host'
 import { positionOf } from '../music/time'
+import { previewAnswer } from './preview'
 
 export { positionOf }
 
@@ -122,8 +123,9 @@ export function qqMusic(command: QqMusicCommand): void {
 
 const asking = createAsking<QqMusicQuestion, QqMusicAnswers>(
   (id, question) => qqMusic({ action: 'ask', id, question }),
-  // No preview in a plain browser: nothing to answer from.
-  () => Promise.reject(new Error('no preview')),
+  // No host in a plain browser (and the companion's own screen): an invented catalogue stands in,
+  // so the preview shows what the app looks like instead of a page that couldn't load (preview.ts).
+  previewAnswer,
   isInHost,
 )
 
