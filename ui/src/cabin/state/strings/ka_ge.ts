@@ -520,6 +520,7 @@ export const strings: Strings = {
     player: 'Player',
     safari: 'Safari',
     podcasts: 'პოდკასტები',
+    radio: 'რადიო',
     phone: 'ტელეფონი',
     messages: 'შეტყობინებები',
     vehicle: 'Vehicle',

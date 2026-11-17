@@ -12,6 +12,7 @@ describe('the apps this release has', () => {
       'player',
       'safari',
       'podcasts',
+      'radio',
       'calendar',
       'vehicle',
       'weather',

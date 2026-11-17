@@ -26,6 +26,7 @@ mod planner;
 mod play_log;
 mod player;
 mod pointer;
+mod radio;
 pub mod route;
 mod route_change;
 mod safari;
@@ -560,6 +561,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut music_player: Option<music_folder::Player> = None;
     let mut music_player_playback: Option<String> = None;
     let mut music_player_log = play_log::PlayLog::new("player");
+    // Live radio's own player (radio.rs), while the page uses it, and what it last said played.
+    let mut radio: Option<radio::Radio> = None;
+    let mut radio_playback: Option<String> = None;
+    let mut radio_log = play_log::PlayLog::new("radio");
     // Safari's pages (safari.rs), while the page uses them, and what each tab last said (sent again when the page
     // reloads) and whether any plays.
     let mut safari: Option<safari::Safari> = None;
@@ -1113,6 +1118,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     {
                         let _ = webview.post_json(playback);
                     }
+                    if radio.is_some()
+                        && let Some(playback) = &radio_playback
+                    {
+                        let _ = webview.post_json(playback);
+                    }
                     if safari.is_some() {
                         for message in safari_tabs.values() {
                             let _ = webview.post_json(message);
@@ -1304,6 +1314,13 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         // Nothing to pause: Player's player isn't running.
                     } else if let Some(player) = start_music_player(&mut music_player, &stage, &config, music_dir.as_deref()) {
                         let _ = player.command(&command);
+                    }
+                }
+                Some(PageMessage::Radio { command }) => {
+                    if radio.is_none() && matches!(command, radio::Command::Pause { .. }) {
+                        // Nothing to pause: Radio isn't running.
+                    } else if let Some(player) = start_radio(&mut radio, &stage, &config) {
+                        player.command(&command);
                     }
                 }
                 Some(PageMessage::QqMusic { command }) => {
@@ -1954,6 +1971,53 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
         }
 
+        // What Radio's page says, for the page; its WebView failing closes it, as the game closing does.
+        if let Some(player) = &radio {
+            if player.failed() || players_closing {
+                if players_closing {
+                    log!("[radio] closed with the game");
+                } else {
+                    log!("[radio] its browser failed: closed, the page opens it again");
+                }
+                if let Some(line) = radio_log.heard(None) {
+                    log!("{line}");
+                }
+                if let Some(failed) = radio.take() {
+                    failed.close(&stage);
+                }
+                radio_playback = None;
+                let _ = webview.post_json(&radio::playback_message(None));
+            } else {
+                for report in player.take_reports() {
+                    match report {
+                        radio::Report::Spectrum(bars) => {
+                            let _ = webview.post_json(&speakers::spectrum_message(&bars));
+                        }
+                        radio::Report::Answer(answer) => {
+                            let _ = webview.post_json(&radio::answer_message(&answer));
+                        }
+                        radio::Report::Playback(playback) => {
+                            let heard = playback.as_ref().map(|playback| play_log::Heard {
+                                doing: match playback.status.as_str() {
+                                    "playing" => play_log::Doing::Playing,
+                                    "loading" => play_log::Doing::Loading,
+                                    _ => play_log::Doing::Paused,
+                                },
+                                track: Some(playback.title.as_str()),
+                                position: 0.0,
+                            });
+                            if let Some(line) = radio_log.heard(heard) {
+                                log!("{line}");
+                            }
+                            let message = radio::playback_message(playback.as_ref());
+                            let _ = webview.post_json(&message);
+                            radio_playback = Some(message);
+                        }
+                    }
+                }
+            }
+        }
+
         // What Safari's pages say, for the page; its browser failing closes it, as the game closing does (every tab
         // let go: the page shows them again as it wants them).
         if let Some(browser) = &mut safari {
@@ -2157,6 +2221,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
             }
             if let Some(player) = &music_player {
+                let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
+            }
+            if let Some(player) = &radio {
                 let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
             }
             if let Some(browser) = &mut safari {
@@ -2770,6 +2837,22 @@ fn start_youtube_music<'a>(
     youtube_music.as_ref()
 }
 
+/// Live radio's player, started as the page first asks or plays (on the cabin page's profile), or `None` if it
+/// couldn't start.
+fn start_radio<'a>(radio: &'a mut Option<radio::Radio>, stage: &Stage, config: &Config) -> Option<&'a radio::Radio> {
+    if radio.is_none() {
+        let user_data = config.data_dir.join("webview2");
+        match radio::Radio::start(stage, config.width, config.height, &user_data) {
+            Ok(started) => {
+                log!("[radio] opened");
+                *radio = Some(started)
+            }
+            Err(e) => startup::mark(&format!("host: Radio couldn't start: {e}")),
+        }
+    }
+    radio.as_ref()
+}
+
 /// Spotify's web player, started as the page first shows it (on a WebView2 profile of its own: signing out
 /// of Spotify forgets nothing else), or `None` if it couldn't start.
 fn start_spotify<'a>(
@@ -2948,6 +3031,8 @@ enum PageMessage {
     WebApp { command: webapp::Command },
     /// A command for Player's own player (`player`): what to play from the music folder, its controls.
     Player { command: music_folder::Command },
+    /// A command for live radio (`radio`): directory/schedule questions, stream playback, volume.
+    Radio { command: radio::Command },
     /// What the Safari app asks of its pages (`safari`): a tab shown, loaded, typed into, and so on.
     Safari { command: safari::Command },
     /// A command for QQ Music's own player (`qqMusic`): its questions, what it plays, how.

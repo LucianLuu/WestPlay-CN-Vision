@@ -127,13 +127,7 @@ export interface JobInfo {
 /** What a keybind does: the music's volume a step up or down, or it paused or played on; or, a volume key held
  * (two seconds: owner 2026-11-03), the next song or the one before (or the song's start, past its first seconds). */
 export type KeybindAction =
-  | 'volumeUp'
-  | 'volumeDown'
-  | 'playPause'
-  | 'nextTrack'
-  | 'previousTrack'
-  | 'brightnessDown'
-  | 'brightnessUp'
+  'volumeUp' | 'volumeDown' | 'playPause' | 'nextTrack' | 'previousTrack' | 'brightnessDown' | 'brightnessUp'
 
 export type HostMessage =
   | { type: 'telemetry'; data: Telemetry }
@@ -299,6 +293,10 @@ export type HostMessage =
   | { type: 'musicFolder'; folder: string | null; songs: PlayerSong[] }
   /** What Player plays; `null`: nothing. */
   | { type: 'playerPlayback'; playback: PlayerPlayback | null }
+  /** Radio's answer to a directory or schedule question `id` (`failed`: request failed). */
+  | { type: 'radioAnswer'; id: number; failed?: boolean; error?: string; radio?: { kind: string; data: unknown } }
+  /** What live radio plays; `null`: nothing. */
+  | { type: 'radioPlayback'; playback: RadioPlayback | null }
   /** YouTube Music's web player: whether it's signed in and playing (`null`: not running), whether its sign-in
    * window is open on the PC, and the account's picture (Google's). YouTube's sign-in: they share it. */
   | {
@@ -435,6 +433,8 @@ export type PageMessage =
   | { type: 'youtubeMusic'; command: YouTubeMusicCommand }
   /** A command for Player's own player (`westplay_host::music_folder::Command`). */
   | { type: 'player'; command: PlayerCommand }
+  /** A command for live radio (`westplay_host::radio::Command`). */
+  | { type: 'radio'; command: RadioCommand }
   /** A command for QQ Music's own player. */
   | { type: 'qqMusic'; command: QqMusicCommand }
   /** What the Safari app asks of its pages (`westplay_host::safari::Command`). */
@@ -444,12 +444,12 @@ export type PageMessage =
   | { type: 'performanceMode'; on: boolean }
   | { type: 'spatial'; on: boolean }
 
-/** A Safari tab's page (`westplay_host::safari::TabState`): its address and title, whether it loads, whether it
- * can go back or forward, its icon's address, its colour at the top (a CSS colour), whether it's full screen,
- * the field pressed in it (a password's value as dots) and why it failed to load. */
-| { type: 'ime'; on: boolean }
-| { type: 'log'; text: string }
-| { type: 'webApp'; command: WebAppCommand }
+  /** A Safari tab's page (`westplay_host::safari::TabState`): its address and title, whether it loads, whether it
+   * can go back or forward, its icon's address, its colour at the top (a CSS colour), whether it's full screen,
+   * the field pressed in it (a password's value as dots) and why it failed to load. */
+  | { type: 'ime'; on: boolean }
+  | { type: 'log'; text: string }
+  | { type: 'webApp'; command: WebAppCommand }
 export interface SafariTabState {
   url: string
   title: string
@@ -1475,3 +1475,34 @@ export type QqMusicCommand =
   | { action: 'add'; id: string }
   /** Open the site's own sign-in window on the desktop. */
   | { action: 'signIn' }
+
+/** What the Radio app asks of live radio's web player (`westplay_host::radio::Command`). */
+export type RadioCommand =
+  | { action: 'play'; track?: RadioTrack; requestId?: number }
+  | { action: 'pause'; requestId?: number }
+  | { action: 'volume'; percent: number }
+  | { action: 'ask'; id: number; question: RadioQuestion }
+
+export type RadioQuestion =
+  | { ask: 'radioHome' }
+  | { ask: 'radioList'; locationId: number; locationTypeId: number; categoryId: number; pageNum: number }
+  | { ask: 'radioDetail'; radioId: number }
+  | { ask: 'radioSchedule'; radioId: number }
+
+export interface RadioTrack {
+  id: string
+  title: string
+  artist: string
+  artwork?: string
+  radioId: number
+}
+
+export interface RadioPlayback {
+  title: string
+  artist: string
+  artwork?: string
+  status: 'loading' | 'playing' | 'paused' | 'failed'
+  radioId: number
+  requestId?: number
+  error?: string
+}

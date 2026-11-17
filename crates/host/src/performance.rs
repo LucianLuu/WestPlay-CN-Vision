@@ -389,6 +389,8 @@ fn page_part(hosts: &[String], cab_host: &str) -> &'static str {
         "NetEase Cloud Music"
     } else if any("qtfm.cn", ".qtfm.cn") || any("qingting.fm", ".qingting.fm") {
         "Qingting FM"
+    } else if any("ximalaya.com", ".ximalaya.com") {
+        "Radio"
     } else {
         "other pages"
     }
@@ -760,6 +762,7 @@ mod tests {
         assert_eq!(page_part(&hosts(&["www.youtube.com"]), "westplay.cabin"), "YouTube");
         assert_eq!(page_part(&hosts(&["music.youtube.com"]), "westplay.cabin"), "YouTube");
         assert_eq!(page_part(&hosts(&["www.qtfm.cn"]), "westplay.cabin"), "Qingting FM");
+        assert_eq!(page_part(&hosts(&["www.ximalaya.com"]), "westplay.cabin"), "Radio");
         assert_eq!(page_part(&hosts(&["accounts.google.com"]), "westplay.cabin"), "other pages");
     }
 

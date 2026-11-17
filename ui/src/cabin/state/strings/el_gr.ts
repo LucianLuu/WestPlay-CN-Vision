@@ -521,6 +521,7 @@ export const strings: Strings = {
     player: 'Player',
     safari: 'Safari',
     podcasts: 'Podcast',
+    radio: 'Ραδιόφωνο',
     phone: 'Τηλέφωνο',
     messages: 'Μηνύματα',
     vehicle: 'Vehicle',

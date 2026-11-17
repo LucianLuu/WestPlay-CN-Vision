@@ -7,6 +7,7 @@ import { pauseSpotifyWithGame, spotifyPlayer } from './apps/spotify/pauseWithGam
 import { pauseYouTubeWithGame, youtubePlayer } from './apps/youtube/pauseWithGame'
 import { pauseYouTubeMusicWithGame, youtubeMusicPlayer } from './apps/youtubeMusic/pauseWithGame'
 import { pausePlayerWithGame, playerAppPlayer } from './apps/player/pauseWithGame'
+import { pauseRadioWithGame, radioPlayer } from './apps/radio/pauseWithGame'
 import { pauseQqMusicWithGame, qqMusicPlayer } from './apps/qq/pauseWithGame'
 import { pauseSafariWithGame, safariPlayer } from './apps/safari/pauseWithGame'
 import { webappPlayer } from './apps/web/player'
@@ -48,6 +49,7 @@ const PLAYERS = [
   youtubeMusicPlayer,
   qqMusicPlayer,
   playerAppPlayer,
+  radioPlayer,
   safariPlayer,
 ]
 
@@ -70,6 +72,7 @@ export function CabinApp() {
   useEffect(() => pauseAppleMusicWithGame(), [])
   useEffect(() => pauseYouTubeMusicWithGame(), [])
   useEffect(() => pausePlayerWithGame(), [])
+  useEffect(() => pauseRadioWithGame(), [])
   useEffect(() => pauseQqMusicWithGame(), [])
   useEffect(() => pauseSafariWithGame(), [])
   // One of them at a time: the newest to start plays on, the others pause (apps/oneAtATime.ts).

@@ -44,6 +44,8 @@ import {
 } from '../apps/web/webapp'
 import { receiveAnswer, receiveState, useYouTube } from '../apps/youtube/youtube'
 import { receiveFolder, receivePlayback as receivePlayerPlayback } from '../apps/player/player'
+import { receiveRadioAnswer } from '../apps/radio/api'
+import { receiveRadioPlayback } from '../apps/radio/radio'
 import {
   receiveClosed as receiveSafariClosed,
   receiveDialog as receiveSafariDialog,
@@ -697,9 +699,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         useKeyboard.setState({ physical: message.state })
         break
       case 'fatigue':
-      useLive.setState({ fatigueSimulation: message.on })
-      break
-    case 'mapBlock':
+        useLive.setState({ fatigueSimulation: message.on })
+        break
+      case 'mapBlock':
         useLive.setState({
           hvtMap: message.hvt ? { language: message.language } : null,
           gameLanguage: message.language,
@@ -876,6 +878,12 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'playerPlayback':
         receivePlayerPlayback(message.playback)
+        break
+      case 'radioAnswer':
+        receiveRadioAnswer(message.id, message.radio, message.failed, message.error)
+        break
+      case 'radioPlayback':
+        receiveRadioPlayback(message.playback)
         break
       case 'safariTab':
         receiveSafariTab(message.tab, message.state)

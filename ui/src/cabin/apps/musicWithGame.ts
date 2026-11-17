@@ -13,6 +13,8 @@ import { poweredOff, poweredOn, withGame } from './youtube/withGame'
 export interface MusicPlayer {
   /** Its name: one fade at a time for each (fade.ts). */
   name: string
+  /** Whether a local playback request is still connecting. */
+  pendingHere?(): boolean
   /** Whether music plays here now. */
   playingHere(): boolean
   pauseHere(): void
@@ -55,7 +57,7 @@ export function pauseMusicWithGame(player: MusicPlayer): () => void {
     const away = isAway(live)
     const wasAway = isAway(before)
     if (away === wasAway) return
-    const action = withGame(away, wasAway, player.playingHere(), paused, !isOff())
+    const action = withGame(away, wasAway, player.playingHere() || Boolean(player.pendingHere?.()), paused, !isOff())
     if (action === 'pause') {
       fadeOutAndPause(player)
       paused = true
@@ -69,9 +71,11 @@ export function pauseMusicWithGame(player: MusicPlayer): () => void {
     const wasOff = before.power.phase === 'off'
     // Off: whatever it's doing stops at once (no fade: owner 2026-10-21).
     if (poweredOff(wasOff, off)) {
-      pausedByPower = player.playingHere()
-      logToHost(`${player.name} with the electrics off: ${pausedByPower ? 'paused' : 'nothing playing'}`)
-      if (pausedByPower) player.pauseHere()
+      const active = player.playingHere()
+      const pending = Boolean(player.pendingHere?.())
+      pausedByPower = active
+      logToHost(`${player.name} with the electrics off: ${active || pending ? 'paused' : 'nothing playing'}`)
+      if (active || pending) player.pauseHere()
       paused = false
       return
     }
@@ -87,7 +91,8 @@ export function pauseMusicWithGame(player: MusicPlayer): () => void {
   })
   // Nothing plays while they're off: music that starts playing here then is paused as it starts.
   const dark = player.subscribe((started) => {
-    if (isOff() && started) player.pauseHere()
+    if (!isOff()) return
+    if (player.pendingHere?.() || started) player.pauseHere()
   })
   return () => {
     game()

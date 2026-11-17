@@ -9,6 +9,7 @@ import { isCopied, noteOpened, openedBefore, saveCopy, savedCopy } from './launc
 import { MusicApp } from './music/MusicApp'
 import { QqApp } from './qq/QqApp'
 import { PlayerApp } from './player/PlayerApp'
+import { RadioApp } from './radio/RadioApp'
 import { SafariApp } from './safari/SafariApp'
 import { SettingsApp } from './settings/SettingsApp'
 import { WebApp } from './web/WebAppScreen'
@@ -109,6 +110,8 @@ function AppContent({ app }: { app: AppId }) {
       return <CalendarApp />
     case 'player':
       return <PlayerApp />
+    case 'radio':
+      return <RadioApp />
     case 'safari':
       return <SafariApp />
     default:

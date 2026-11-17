@@ -3,7 +3,7 @@
  * Dashboard shows it, and its controls.
  */
 
-export type MusicService = 'appleMusic' | 'spotify' | 'youTubeMusic' | 'webApp' | 'player' | 'qqMusic'
+export type MusicService = 'appleMusic' | 'spotify' | 'youTubeMusic' | 'webApp' | 'player' | 'qqMusic' | 'radio'
 
 export interface MediaSource {
   /** Which player it is (`westplay-apple-music`). */

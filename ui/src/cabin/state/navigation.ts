@@ -36,7 +36,7 @@ const SIDEBAR_SLOTS: readonly (readonly AppId[])[] = [
   ['maps'],
   // The music slots: the sites stand in the older apps' ids (apps/AppScreen), their own two (Douyin,
   // Kugou Music) beside them; Safari has a slot of its own too, so 2.3.0's browser is a press away.
-  ['music', 'spotify', 'youtubeMusic', 'player', 'podcasts', 'douyin', 'kugou'],
+  ['music', 'spotify', 'youtubeMusic', 'player', 'podcasts', 'radio', 'douyin', 'kugou'],
   ['phone', 'messages'],
   ['calendar', 'weather'],
   // The truck's own condition, from the game's telemetry.

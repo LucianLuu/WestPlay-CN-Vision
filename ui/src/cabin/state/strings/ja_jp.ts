@@ -516,6 +516,7 @@ export const strings: Strings = {
     player: 'Player',
     safari: 'Safari',
     podcasts: 'Podcast',
+    radio: 'ラジオ',
     phone: '電話',
     messages: 'メッセージ',
     vehicle: 'Vehicle',

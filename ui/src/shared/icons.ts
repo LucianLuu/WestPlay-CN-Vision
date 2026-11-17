@@ -11,6 +11,7 @@ export type AppIconRole =
   | 'music'
   | 'spotify'
   | 'podcasts'
+  | 'radio'
   | 'messages'
   | 'phone'
   | 'calendar'
@@ -31,6 +32,7 @@ const FILES: Record<AppIconRole, string> = {
   spotify: 'netease',
   // Qingting FM's own mark (red, on its own card): the podcast slot shows it now.
   podcasts: 'qingting',
+  radio: 'radio',
   messages: 'messages',
   phone: 'phone',
   calendar: 'calendar',
@@ -59,7 +61,5 @@ const PICTURES: ReadonlySet<AppIconRole> = new Set<AppIconRole>([
 
 /** WestPlay's own icon for `role`, for a light or a dark screen. */
 export function appIcon(role: AppIconRole, look: 'light' | 'dark' = 'light'): string {
-  return PICTURES.has(role)
-    ? `/icons/westplay/${FILES[role]}.png`
-    : `/icons/westplay/${FILES[role]}.${look}.svg`
+  return PICTURES.has(role) ? `/icons/westplay/${FILES[role]}.png` : `/icons/westplay/${FILES[role]}.${look}.svg`
 }

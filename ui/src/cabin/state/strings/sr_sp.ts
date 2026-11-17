@@ -532,6 +532,7 @@ export const strings: Strings = {
     player: 'Player',
     safari: 'Safari',
     podcasts: 'Podkasti',
+    radio: 'Radio',
     phone: 'Telefon',
     messages: 'Poruke',
     vehicle: 'Vehicle',

@@ -521,6 +521,7 @@ export const strings: Strings = {
     player: 'Player',
     safari: 'Safari',
     podcasts: 'Podcasts',
+    radio: 'Radio',
     phone: 'Telefon',
     messages: 'Beskeder',
     vehicle: 'Vehicle',

@@ -11,7 +11,7 @@ export function oneAtATime(players: readonly MusicPlayer[]): () => void {
     player.subscribe((started) => {
       if (!started) return
       for (const other of players) {
-        if (other !== player && other.playingHere()) other.pauseHere()
+        if (other !== player && (other.playingHere() || other.pendingHere?.())) other.pauseHere()
       }
     }),
   )
