@@ -1,5 +1,5 @@
 //! The QQ middle layer (the `web` folder of L-1124's QQMusicApi, GPL-3.0), served on
-//! `127.0.0.1:8080` for `qq_music.js`: a Python process of WestPlay's own, started when WestPlay
+//! `127.0.0.1:8787` for `qq_music.js`: a Python process of WestPlay's own, started when WestPlay
 //! does and stopped when it ends.
 //!
 //! It has to be a process of its own. The player's page is a browser context: it can't set a
@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// The port the layer serves on (`config.toml`'s `server.port`, and qq_music.js's `BASE`).
-const PORT: u16 = 8080;
+/// The launcher's probe, child process and player all use this port. Steam may already use 8080.
+pub(crate) const PORT: u16 = 8787;
 
 /// How long to wait for the layer to answer before saying it didn't start.
 const READY_TIMEOUT: Duration = Duration::from_secs(20);
@@ -56,9 +56,20 @@ impl Layer {
             crate::log!("[qq layer] not shipped: no run.py or run.pyc in {}", web.display());
             return None;
         };
+        // The settings parser splits environment keys on underscores, so pass the section as JSON.
+        let mut security = std::env::var("QQMUSIC_SECURITY")
+            .ok()
+            .and_then(|value| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&value).ok())
+            .unwrap_or_default();
+        // The local player can issue several requests for a single playlist or track.
+        security.insert("rate_limit_exempt_ips".into(), serde_json::json!(["127.0.0.1", "::1"]));
         let child = Command::new(&python)
             .arg(&run)
             .current_dir(&web)
+            // Use the same loopback endpoint as the player, even with an older bundled config.
+            .env("QQMUSIC_SERVER_HOST", "127.0.0.1")
+            .env("QQMUSIC_SERVER_PORT", PORT.to_string())
+            .env("QQMUSIC_SECURITY", serde_json::Value::Object(security).to_string())
             // Its own console is hidden: nothing of it shows in the cab.
             .stdin(Stdio::null())
             .stdout(Stdio::null())

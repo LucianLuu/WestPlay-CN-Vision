@@ -10,7 +10,7 @@
 (function () {
   const post = (message) => window.chrome?.webview?.postMessage(message)
 
-  const BASE = 'http://127.0.0.1:8080'
+  const BASE = 'http://127.0.0.1:__WESTPLAY_QQ_LAYER_PORT__'
 
   // --- Small helpers ----------------------------------------------------------------------------------------
 

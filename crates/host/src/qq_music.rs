@@ -1,5 +1,5 @@
 //! QQ Music: WestPlay's own QQ Music home (`ui/src/cabin/apps/qq`), backed by a hidden WebView whose
-//! script (`qq_music.js`) fetches the local QQ middle layer (L-1124/QQMusicApi on 127.0.0.1:8080) and answers
+//! script (`qq_music.js`) fetches the local QQ middle layer (L-1124/QQMusicApi on loopback) and answers
 //! the app's questions. The login credential lives in the middle layer's account pool: nothing of the account
 //! passes through WestPlay or this page; what comes out is only what the app shows (names, covers, what plays).
 //!
@@ -493,7 +493,9 @@ impl QqMusic {
         view.show(false)?;
         stage.add(&view, false)?;
         // The truck speakers' sound first: the page's script makes its own of it (`cab_sound.js`).
-        view.add_startup_script(concat!(include_str!("cab_sound.js"), "\n", include_str!("qq_music.js")))?;
+        let script = concat!(include_str!("cab_sound.js"), "\n", include_str!("qq_music.js"))
+            .replace("__WESTPLAY_QQ_LAYER_PORT__", &crate::qq_layer::PORT.to_string());
+        view.add_startup_script(&script)?;
         view.navigate_to_string(SHELL)?;
         Ok(Self {
             view,
