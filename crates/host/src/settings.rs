@@ -650,7 +650,10 @@ mod tests {
                 icon_set: Some("Retro".into()),
                 icon_style: IconStyle::Dark,
             },
-            graphics: GraphicsSettings { gpu: Some("10de:2702:00000000:161".into()) },
+            graphics: GraphicsSettings {
+                gpu: Some("10de:2702:00000000:161".into()),
+                frame_rate: FrameRate::Display,
+            },
             sound: SoundSettings {
                 equalizer: crate::speakers::Equalizer { bass: -3, mid: 1, treble: 2 },
                 custom: true,
@@ -658,6 +661,7 @@ mod tests {
                 coach: CoachSpeakers::Driver,
             },
             map: MapSettings { buildings: false, roads: false, fast: true },
+            window: WindowSettings { start_minimised: true, tray: true },
             mobile_web_ui: true,
             language: LanguageCode::new("pt_br"),
         };
