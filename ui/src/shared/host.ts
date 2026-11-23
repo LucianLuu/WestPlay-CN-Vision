@@ -162,7 +162,6 @@ export type HostMessage =
       /** Whether the screen gives up some of its effects to run lighter, chosen in Settings › Display &
        * Performance (`westplay_host::settings::ScreenSettings::performance_mode`). An older host sends none,
        * meaning off. */
-      performanceMode?: boolean
       /** The truck's own speakers, placed in its cab (Settings › Sound), or not: its sound plays as it is. */
       spatial?: boolean
     }
@@ -471,7 +470,6 @@ export type PageMessage =
   | { type: 'safari'; command: SafariCommand }
   | { type: 'refreshRate'; rate: '60' | '30' }
   | { type: 'trafficLights'; on: boolean }
-  | { type: 'performanceMode'; on: boolean }
   | { type: 'spatial'; on: boolean }
 
   /** A Safari tab's page (`westplay_host::safari::TabState`): its address and title, whether it loads, whether it

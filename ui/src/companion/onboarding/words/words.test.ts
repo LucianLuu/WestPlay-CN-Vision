@@ -48,24 +48,17 @@ describe('the onboarding’s words', () => {
   })
 
   it('takes Windows’ language, as the game has it', () => {
-    expect(languageOf(['tr-TR'])).toBe('tr_tr')
+    // CN Vision 只留了英语、简体中文和繁体中文（owner 2026-11-23）：其余语言落到英文。
     expect(languageOf(['en-US'])).toBe('en_us')
-    expect(languageOf(['en-GB'])).toBe('en_gb')
     expect(languageOf(['en'])).toBe('en_us')
-    expect(languageOf(['de-AT'])).toBe('de_de')
-    expect(languageOf(['es-MX'])).toBe('es_la')
-    expect(languageOf(['es-ES'])).toBe('es_es')
-    expect(languageOf(['fr-CA'])).toBe('fr_ca')
-    expect(languageOf(['fr-BE'])).toBe('fr_fr')
-    expect(languageOf(['pt-BR'])).toBe('pt_br')
-    expect(languageOf(['pt-PT'])).toBe('pt_pt')
     expect(languageOf(['zh-Hant-TW'])).toBe('zh_tw')
+    expect(languageOf(['zh-Hant-HK'])).toBe('zh_tw')
     expect(languageOf(['zh-CN'])).toBe('zh_cn')
-    expect(languageOf(['sr-Latn-RS'])).toBe('sr_sp')
-    expect(languageOf(['sr-Cyrl-RS'])).toBe('sr_sr')
-    expect(languageOf(['nb-NO'])).toBe('no_no')
-    // A language the game doesn't have: the next one Windows lists, else English.
-    expect(languageOf(['xh-ZA', 'de-DE'])).toBe('de_de')
+    expect(languageOf(['zh-Hans-CN'])).toBe('zh_cn')
+    // 其它语言：英文。
+    expect(languageOf(['tr-TR'])).toBe('en_us')
+    expect(languageOf(['de-AT'])).toBe('en_us')
+    expect(languageOf(['ja-JP'])).toBe('en_us')
     expect(languageOf(['xh-ZA'])).toBe('en_us')
   })
 })

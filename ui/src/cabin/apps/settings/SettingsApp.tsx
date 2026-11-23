@@ -279,8 +279,6 @@ function AppearancePage() {
   const setReduceTransparency = useCabin((state) => state.setReduceTransparency)
   // Performance Mode keeps the surfaces flat too (store.ts's choosePerformanceMode): the row reads on
   // while it is, and turning it off here leaves that mode — the switch would do nothing otherwise.
-  const performance = useCabin((state) => state.performanceMode)
-  const choosePerformance = useCabin((state) => state.choosePerformanceMode)
   const open = useSettings((state) => state.open)
   return (
     <Page title={text.settings.appearance}>
@@ -316,12 +314,12 @@ function AppearancePage() {
         <NavRow label={text.settings.textSize} onOpen={() => open('textSize')} />
         <SwitchRow
           label={text.settings.reduceTransparency}
-          on={reduceTransparency || performance}
+          on={reduceTransparency}
           onToggle={(on) => {
             setReduceTransparency(on)
             // Performance Mode keeps the surfaces flat too (store.ts): turning this off leaves it, or
             // the switch would do nothing while that mode is on.
-            if (!on && performance) choosePerformance(false)
+            
           }}
         />
       </Group>
@@ -976,8 +974,6 @@ function DisplayPage() {
   const text = useText()
   const refreshRate = useCabin((state) => state.refreshRate)
   const chooseRefreshRate = useCabin((state) => state.chooseRefreshRate)
-  const performance = useCabin((state) => state.performanceMode)
-  const choosePerformance = useCabin((state) => state.choosePerformanceMode)
   return (
     <Page title={text.settings.displayPerformance}>
       <Group footer={text.settings.refreshRateFooter}>
@@ -997,9 +993,6 @@ function DisplayPage() {
             ))}
           </div>
         </div>
-      </Group>
-      <Group footer={text.settings.performanceModeFooter}>
-        <SwitchRow label={text.settings.performanceMode} on={performance} onToggle={choosePerformance} />
       </Group>
     </Page>
   )

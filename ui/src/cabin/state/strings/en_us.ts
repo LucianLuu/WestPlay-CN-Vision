@@ -487,8 +487,6 @@ export const strings: Strings = {
     hz30: '30 Hz',
     hz60: '60 Hz',
     maps: 'Maps',
-    performanceMode: 'Performance Mode',
-    performanceModeFooter: 'Gives up some effects in exchange for performance.',
     refreshRate: 'Screen Refresh Rate',
     refreshRateFooter: 'Changes the refresh rate of the screen’s display.',
     trafficLights: 'Traffic Lights',

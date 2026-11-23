@@ -575,16 +575,14 @@ function syncAppearance(target: LiveMap) {
 }
 
 /**
- * Shows the map's raised buildings, or puts the layer away in the performance mode (Settings › Display &
  * Performance): it's the map's heaviest drawing — every building in view, redrawn each frame. Like the
  * appearance and the garages, retried each frame until the style has loaded.
  */
 function syncBuildings(target: LiveMap) {
-  const mode = useCabin.getState().performanceMode
-  if (target.buildingsMode === mode) return
+  if (target.buildingsMode === false) return
   try {
-    target.map.setLayoutProperty(BUILDING_LAYER, 'visibility', buildingsVisibility(mode))
-    target.buildingsMode = mode
+    target.map.setLayoutProperty(BUILDING_LAYER, 'visibility', buildingsVisibility(false))
+    target.buildingsMode = false
   } catch {
     // The style is still loading.
   }

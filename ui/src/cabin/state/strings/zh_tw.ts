@@ -488,8 +488,6 @@ export const strings: Strings = {
     hz30: '30 Hz',
     hz60: '60 Hz',
     maps: '地图',
-    performanceMode: '性能模式',
-    performanceModeFooter: '阉割部分效果以换取性能',
     refreshRate: '屏幕刷新率',
     refreshRateFooter: '修改屏幕显示的刷新率',
     trafficLights: '红绿灯显示',

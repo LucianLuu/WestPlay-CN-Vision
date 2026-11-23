@@ -152,11 +152,6 @@ interface CabinState {
    * it belongs with it, 2026-11-02): on by default. Off, the host stops reading the game's memory altogether
    * (crates/host traffic_lights.rs). */
   trafficLights: boolean
-  /** Whether the screen gives up some of its effects to run lighter (Settings › Display & Performance), off
-   * by default: the map's 3D buildings (`maps/buildings.ts`), the frosted glass and the animations
-   * (`performance.css`, through the `performance` class on <html>, CabinApp.tsx). The host keeps it with
-   * WestPlay's settings, as it keeps the refresh rate. */
-  performanceMode: boolean
   /** The game's own mirror on the dashboard, through the hole the page cuts for it (Settings › Display &
    * Performance, owner 2026-11-03): on by default, as it shipped. Off, the dashboard draws nothing there and no
    * hole is cut, so its page stays whole. The page's own, as the text size is: the host keeps nothing of it. */
@@ -221,11 +216,6 @@ interface CabinState {
   chooseRefreshRate(rate: RefreshRate): void
   /** The next traffic light shown or not (Settings › Maps), the host told either way. */
   setTrafficLights(on: boolean): void
-  /** The host's own value, as the settings message says it (an older host: every effect stays on). */
-  setPerformanceMode(on: boolean): void
-  /** The player's choice, in Settings › Display & Performance: applied here, and kept with WestPlay's
-   * settings (the host only keeps it: what it gives up is all the page's own). */
-  choosePerformanceMode(on: boolean): void
   /** The game's mirror on the dashboard or not (Settings › Display & Performance): applied here, kept with the
    * page's own settings (`MirrorWidget` cuts the hole only while it's on). */
   setMirrorOn(on: boolean): void
@@ -280,7 +270,6 @@ export const useCabin = create<CabinState>()(
       trafficLights: true,
       oemMode: 'auto',
       refreshRate: DEFAULT_REFRESH_RATE,
-      performanceMode: false,
       zoomWithSpeed: true,
       mirrorOn: true,
       mapBuildings: true,
@@ -357,15 +346,8 @@ export const useCabin = create<CabinState>()(
         // Off, the host stops reading the game's memory at all (traffic_lights.rs): not just hidden.
         if (isInHost()) postToHost({ type: 'trafficLights', on: trafficLights })
       },
-      setPerformanceMode: (performanceMode) => set({ performanceMode }),
       setZoomWithSpeed: (zoomWithSpeed) => set({ zoomWithSpeed }),
       setMirrorOn: (mirrorOn) => set({ mirrorOn }),
-      choosePerformanceMode: (on) => {
-        // The glass goes with it: Liquid Glass doesn't know this mode, so the flat surfaces are what the
-        // page gives up (§ Display & Performance). Off, the glass comes back as it was.
-        set({ performanceMode: on, reduceTransparency: on })
-        if (isInHost()) postToHost({ type: 'performanceMode', on })
-      },
       powerEvent: (event) =>
         set((state) => {
           const next = power(state.power, event)
@@ -780,8 +762,6 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         cabin.setOemMode(message.truckStrip === 'off' ? 'off' : 'auto')
         // Older hosts send no refresh rate: the standard one.
         cabin.setRefreshRate(isRefreshRate(message.refreshRate) ? message.refreshRate : DEFAULT_REFRESH_RATE)
-        // And no performance mode: every effect it gives up stays on.
-        cabin.setPerformanceMode(message.performanceMode === true)
         if (message.wallpaper) useCabin.setState({ wallpaperId: message.wallpaper })
         // Chosen here before WestPlay kept it with its settings: kept now.
         else if (cabin.wallpaperId !== DEFAULT_WALLPAPER_ID) postToHost({ type: 'wallpaper', id: cabin.wallpaperId })

@@ -1328,14 +1328,6 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     }
                 }
                 Some(PageMessage::TrafficLights { on }) => traffic_lights.set_enabled(on),
-                Some(PageMessage::PerformanceMode { on }) => {
-                    let mut settings = config.settings.get();
-                    if settings.screen.performance_mode != on {
-                        settings.screen.performance_mode = on;
-                        config.settings.set(settings.clone());
-                        (config.on_settings)(&settings);
-                    }
-                }
                 Some(PageMessage::Ime { on }) => {
                     if ime_takes_keys != on {
                         log!(
@@ -3282,7 +3274,6 @@ fn screen_message(layout: u32) -> String {
     serde_json::json!({ "type": "screen", "layout": id }).to_string()
 }
 
-/// `{"type":"settings","truckStrip":"auto","refreshRate":"60","performanceMode":false,"wallpaper":"plain","iconSet":null,"iconStyle":"auto","equalizer":…}`:
 /// the settings the cabin page applies itself (its refresh rate is the rate it draws its map at,
 /// `maps/frameCap.ts`, and the performance mode is what it gives up for it; what the capture publishes at is
 /// the host's own). Its language is among them too: one chosen, or `null`, the game's.
@@ -3291,7 +3282,6 @@ fn settings_message(settings: &settings::Settings) -> String {
         "type": "settings",
         "truckStrip": settings.screen.truck_strip,
         "refreshRate": settings.screen.refresh_rate,
-        "performanceMode": settings.screen.performance_mode,
         "wallpaper": settings.look.wallpaper,
         "iconSet": settings.look.icon_set,
         "iconStyle": settings.look.icon_style,
@@ -3380,9 +3370,6 @@ enum PageMessage {
     /// game's memory and the worker closes its handle.
     TrafficLights { on: bool },
     /// Whether the screen gives up some of its effects to run lighter, chosen in the cab's Settings (Display &
-    /// Performance): the cabin page applies it (`ui/src/cabin/performance.css`) and the host only keeps it
-    /// (`settings::ScreenSettings::performance_mode`).
-    PerformanceMode { on: bool },
     /// Whether the cabin's own Chinese input method is taking the player's own keys for the *page's* field
     /// (the cabin keyboard is in Chinese and a site's field is selected): while it is, the host keeps those
     /// keys out of the page — the page's own field would take the letters the composition reads
@@ -3774,16 +3761,6 @@ mod tests {
         // A rate WestPlay doesn't offer is no message at all (and 60 by default in the settings file).
         assert_eq!(parse_page_message(r#"{"type":"refreshRate","rate":"144"}"#), None);
         assert_eq!(parse_page_message(r#"{"type":"refreshRate"}"#), None);
-        // The performance mode (Settings › Display & Performance): its effects given up, or not.
-        assert_eq!(
-            parse_page_message(r#"{"type":"performanceMode","on":true}"#),
-            Some(PageMessage::PerformanceMode { on: true })
-        );
-        assert_eq!(
-            parse_page_message(r#"{"type":"performanceMode","on":false}"#),
-            Some(PageMessage::PerformanceMode { on: false })
-        );
-        assert_eq!(parse_page_message(r#"{"type":"performanceMode"}"#), None);
         // The cabin's own input method taking the player's keys for the page's field (and letting go).
         assert_eq!(parse_page_message(r#"{"type":"ime","on":true}"#), Some(PageMessage::Ime { on: true }));
         assert_eq!(parse_page_message(r#"{"type":"ime","on":false}"#), Some(PageMessage::Ime { on: false }));
@@ -3961,7 +3938,6 @@ mod tests {
                 "type": "settings",
                 "truckStrip": "auto",
                 "refreshRate": "60",
-                "performanceMode": false,
                 "wallpaper": null,
                 "iconSet": null,
                 "iconStyle": "auto",
@@ -3975,7 +3951,6 @@ mod tests {
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;
         settings.screen.refresh_rate = crate::settings::RefreshRate::Hz30;
-        settings.screen.performance_mode = true;
         settings.sound.equalizer = crate::speakers::Equalizer { bass: -9, mid: 2, treble: 6 };
         settings.sound.spatial = false;
         settings.look.wallpaper = Some("custom:Dusk".into());
@@ -3986,7 +3961,6 @@ mod tests {
         // The screen's refresh rate, chosen in the cab's Settings › Display & Performance (60 Hz by default).
         assert_eq!(message["refreshRate"], "30");
         // And its performance mode, chosen there too (off by default).
-        assert_eq!(message["performanceMode"], true);
         assert_eq!(message["language"], "de_de");
         assert_eq!(message["wallpaper"], "custom:Dusk");
         assert_eq!(message["iconSet"], "Retro");

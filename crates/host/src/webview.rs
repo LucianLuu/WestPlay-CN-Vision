@@ -1128,6 +1128,14 @@ fn create_environment(user_data: &Path, autoplay: bool) -> Result<ICoreWebView2E
     if let Some(gpu) = GPU_ARGUMENT.lock().unwrap_or_else(|e| e.into_inner()).as_deref() {
         arguments = format!("{arguments} {gpu}");
     }
+    // 诊断用：`WESTPLAY_DEBUG_PORT=9222` 时车机页开远程调试，可以用 CDP 量页面实际布局。
+    // 不设这个环境变量就完全不开，发布版不受影响。
+    if let Ok(port) = std::env::var("WESTPLAY_DEBUG_PORT") {
+        if !port.is_empty() {
+            arguments = format!("{arguments} --remote-allow-origins=* --remote-debugging-port={port}");
+            log!("[debug] the pages' remote debugging is on, port {port}");
+        }
+    }
     // SAFETY: the options object is ours and alive; the arguments are a plain string.
     unsafe {
         options.set_additional_browser_arguments(arguments);

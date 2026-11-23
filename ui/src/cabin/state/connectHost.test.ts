@@ -129,30 +129,6 @@ describe('connectHost', () => {
     disconnect()
   })
 
-  it("follows the performance mode set in the cab's Settings, and hands its own choice to the host", async () => {
-    const webview = fakeWebView()
-    vi.stubGlobal('window', { chrome: { webview: webview.bridge } })
-    const { connectHost, useCabin } = await import('./store')
-    const disconnect = connectHost(() => 0)
-    // Every effect on until the host says otherwise.
-    expect(useCabin.getState().performanceMode).toBe(false)
-
-    // The host's own value (its settings file), as the page loads.
-    webview.send({ type: 'settings', truckStrip: 'auto', performanceMode: true })
-    expect(useCabin.getState().performanceMode).toBe(true)
-    // An older host's message with none: every effect stays on. And one that isn't a yes or no (a hand-written
-    // settings file): the same.
-    webview.send({ type: 'settings', truckStrip: 'auto' })
-    expect(useCabin.getState().performanceMode).toBe(false)
-    webview.send({ type: 'settings', truckStrip: 'auto', performanceMode: 'yes' } as unknown as HostMessage)
-    expect(useCabin.getState().performanceMode).toBe(false)
-
-    // Chosen in Settings › Display & Performance: applied at once, and handed to the host to keep.
-    useCabin.getState().choosePerformanceMode(true)
-    expect(useCabin.getState().performanceMode).toBe(true)
-    expect(webview.posted.at(-1)).toEqual({ type: 'performanceMode', on: true })
-    disconnect()
-  })
 
   it('keeps the tone the host has, and hands each band set in Settings to it', async () => {
     const webview = fakeWebView()

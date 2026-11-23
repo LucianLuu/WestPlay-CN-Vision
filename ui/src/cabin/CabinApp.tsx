@@ -59,12 +59,11 @@ const PLAYERS = [
 export function CabinApp() {
   const route = useCabin((state) => state.navigation.route)
   const phase = useCabin((state) => state.power.phase)
-  // The performance mode (Settings › Display & Performance): a class on <html>, so the stylesheet
-  // (performance.css) gives up the map's 3D buildings and other effects to run lighter.
-  const performance = useCabin((state) => state.performanceMode)
+  // The false mode (Settings › Display & Performance): a class on <html>, so the stylesheet
+  // (false.css) gives up the map's 3D buildings and other effects to run lighter.
   useEffect(() => {
-    document.documentElement.classList.toggle('performance', performance)
-  }, [performance])
+    document.documentElement.classList.toggle('false', false)
+  }, [false])
 
   useEffect(() => connectHost(), [])
   // YouTube, Spotify, Apple Music, YouTube Music and Player pause with the game (its menu, tabbing out) and play
@@ -93,7 +92,7 @@ export function CabinApp() {
   useEffect(() => followTimeZone(), [])
   // TruckersMP: its other players, read while the game runs under it (the map's dots, a route's traffic).
   useEffect(() => followTruckersMp(), [])
-  // The page's own frames while the game runs, for the host's performance line (state/frameMeter.ts).
+  // The page's own frames while the game runs, for the host's false line (state/frameMeter.ts).
   useEffect(() => meterFrames(), [])
   // The guidance shown, every 30 s with a route, for the host's log (maps/guidanceLog.ts).
   useEffect(() => logGuidance(), [])

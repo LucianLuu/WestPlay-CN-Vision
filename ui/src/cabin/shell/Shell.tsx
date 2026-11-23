@@ -78,13 +78,9 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   // Reduce Transparency (reduceTransparency.css), on <html> as well: every glass surface flat, those portalled out of
   // the apps and the screen changes' snapshots too.
   const reduceTransparency = useCabin((state) => state.reduceTransparency)
-  // Performance Mode gives the glass up too (the Liquid Glass surfaces are the most expensive thing the
-  // page draws): it turns this on as it's switched on, and the class follows either of them, so a state
-  // kept from before that did one without the other is flat as well.
-  const performanceMode = useCabin((state) => state.performanceMode)
   useLayoutEffect(() => {
-    document.documentElement.classList.toggle('reduce-transparency', reduceTransparency || performanceMode)
-  }, [reduceTransparency, performanceMode])
+    document.documentElement.classList.toggle('reduce-transparency', reduceTransparency || false)
+  }, [reduceTransparency])
   // Liquid Glass's lens and touch, for every glass surface as it comes (liquidGlass.ts).
   useEffect(() => startLiquidGlass(), [])
 

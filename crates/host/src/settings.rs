@@ -173,7 +173,14 @@ pub struct GraphicsSettings {
     pub frame_rate: FrameRate,
 }
 
-/// 车机屏幕画的帧率：30、60，或者跟着它自己那块屏。
+/// 车机屏幕画的帧率：3.0 那边叫 `30` / `60` / `display`，我们这边本来就是
+/// [`RefreshRate`]（`30` / `60`）。两张表接成一张：`30` 就是 `Hz30`，`60` 和
+/// `display` 都是 `Hz60`（我们不跟屏幕自己的刷新率走——车机屏是合成出来的，
+/// 跟它没意义）。
+///
+/// 3.0 的界面写的是 `graphics.frameRate`，车的设置页写的是 `screen.refreshRate`；
+/// 两边指的同一件事，所以写这个字段时一并写 [`ScreenSettings::refresh_rate`]
+/// （见 `lib.rs` 的 `Settings` 更新处）。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FrameRate {
     /// 每秒 30 帧。
@@ -183,18 +190,25 @@ pub enum FrameRate {
     #[default]
     #[serde(rename = "60")]
     Fps60,
-    /// 那块屏自己的刷新率。
+    /// 3.0 的「跟随显示器」：我们按 60 处理。
     #[serde(rename = "display")]
     Display,
 }
 
-impl FrameRate {
-    /// 落到具体的帧数（`display` 时就是屏幕的刷新率）。
-    pub fn fps(self, display_hz: u32) -> u32 {
-        match self {
-            Self::Fps30 => 30,
-            Self::Fps60 => 60,
-            Self::Display => display_hz.max(1),
+impl From<FrameRate> for RefreshRate {
+    fn from(rate: FrameRate) -> Self {
+        match rate {
+            FrameRate::Fps30 => RefreshRate::Hz30,
+            FrameRate::Fps60 | FrameRate::Display => RefreshRate::Hz60,
+        }
+    }
+}
+
+impl From<RefreshRate> for FrameRate {
+    fn from(rate: RefreshRate) -> Self {
+        match rate {
+            RefreshRate::Hz30 => FrameRate::Fps30,
+            RefreshRate::Hz60 => FrameRate::Fps60,
         }
     }
 }
@@ -415,12 +429,6 @@ pub struct ScreenSettings {
     /// screen shows WestPlay); on, WestPlay's tablet, the truck's own screens then keeping the game's own.
     #[serde(deserialize_with = "lenient")]
     pub tablet_first: bool,
-    /// Whether the screen gives up some of its effects to run lighter (Settings › Display & Performance ›
-    /// Performance Mode): the map's 3D buildings, the frosted glass and the animations. The cabin page is what
-    /// applies it (`ui/src/cabin/performance.css`, `ui/src/cabin/maps/buildings.ts`); the host only keeps it,
-    /// as it keeps the refresh rate.
-    #[serde(deserialize_with = "lenient")]
-    pub performance_mode: bool,
 }
 
 /// The screen's refresh rate: how often WestPlay's screen is redrawn for the game, 60 Hz as the game's own
@@ -642,7 +650,6 @@ mod tests {
             screen: ScreenSettings {
                 truck_strip: TruckStrip::Off,
                 refresh_rate: RefreshRate::Hz30,
-                performance_mode: true,
                 tablet_first: true,
             },
             look: LookSettings {
@@ -672,8 +679,10 @@ mod tests {
         assert!(json.contains("\"mode\": \"toggle\""), "{json}");
         assert!(json.contains("\"truckStrip\": \"off\""), "{json}");
         assert!(json.contains("\"refreshRate\": \"30\""), "{json}");
-        assert!(json.contains("\"performanceMode\": true"), "{json}");
         assert!(json.contains("\"tabletFirst\": true"), "{json}");
+        assert!(json.contains("\"frameRate\": \"display\""), "{json}");
+        assert!(json.contains("\"startMinimised\": true"), "{json}");
+        assert!(json.contains("\"tray\": true"), "{json}");
         assert!(json.contains("\"spatial\": false"), "{json}");
         assert!(json.contains("\"language\": \"pt_br\""), "{json}");
         assert_eq!(parse(&json).unwrap(), settings);
@@ -704,7 +713,6 @@ mod tests {
         assert!(parse(r#"{"version": 1, "sound": {"spatial": null}}"#).unwrap().sound.spatial);
         assert_eq!(partial.screen.refresh_rate.hz(), 60);
         // And before the performance mode was: off (every effect it gives up is on).
-        assert!(!partial.screen.performance_mode);
         // And from before the display's priority was: the truck's own screen first, as it always was.
         assert!(!partial.screen.tablet_first);
         // And from before the GPU was: WestPlay picks it.
@@ -741,11 +749,6 @@ mod tests {
         assert_eq!(settings.screen.refresh_rate, RefreshRate::Hz60);
         let settings = parse(r#"{"screen": {"refreshRate": "30"}}"#).unwrap();
         assert_eq!(settings.screen.refresh_rate.hz(), 30);
-        // A performance mode that isn't a yes or no is off, not a broken file.
-        let settings = parse(r#"{"screen": {"performanceMode": "yes"}}"#).unwrap();
-        assert!(!settings.screen.performance_mode);
-        let settings = parse(r#"{"screen": {"performanceMode": true}}"#).unwrap();
-        assert!(settings.screen.performance_mode);
         // A key no keyboard has, and a binding missing its key: their defaults.
         let settings =
             parse(r#"{"version": 2, "interaction": {"key": 999}, "keybinds": {"volumeUp": {"key": 300}}}"#).unwrap();
