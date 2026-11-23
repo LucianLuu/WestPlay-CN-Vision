@@ -172,12 +172,6 @@ export const words: Words = {
     finishInWindow: '請在 Apple Music 視窗中完成登入',
     signingIn: { title: '正在登入 Apple Music', text: '請在 Apple Music 視窗中繼續' },
   },
-  webAccounts: {
-    title: '登入 {name}',
-    sub: '選用。登入後，卡車螢幕上就是你在这个網站的帳戶：收藏、追蹤、播放清單和觀看紀錄都在。你會在獨立的視窗中登入，WestPlay 絕不會看到你的帳戶。',
-    finishInWindow: '請在視窗中完成登入',
-    signingIn: { title: '正在登入 {name}', text: '請在視窗中繼續' },
-  },
   launch: {
     title: '一切就緒',
     done: '完成',

@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { type SignedIn, useAskOnce, useSignedIn } from './accounts'
 import { appVersion, call, PREVIEW_TUTORIAL } from './bridge'
 import { Onboarding } from './onboarding/Onboarding'
@@ -19,13 +19,20 @@ import { Support } from './pages/Support'
 import { LanguageSheet } from './pages/LanguageSheet'
 import { UninstallSheet } from './pages/UninstallSheet'
 import { FinishUpdate, UpdateSheet } from './pages/UpdateSheet'
+import { GameStoppedSheet } from './pages/GameStoppedSheet'
+import { useGameStopped } from './gameStopped'
 import { type CompanionWords, companionWords, type SectionId } from './pages/words'
+import { WindowControls } from './WindowControls'
 import { RoomText, n, WordsContext } from './room/room'
 import './room/room.css'
 import { GLOW, type Screen, ScreenContext } from './room/screen'
 import { type Banner, GlassCursor, type Pose, TruckScreen } from './room/TruckScreen'
 import { useDemo } from './room/useDemo'
 import './companion.css'
+// 窗口按钮的样式（.wc 胶囊）：3.0 的值，见该文件顶部。
+import './titlebar.css'
+// 点击动效：3.0 的 Apple 弹簧曲线 --ease，和几条 :active。
+import './motion.css'
 import { defaultMapAddress, GAME_KINDS, GAME_SHORT_NAMES, type GameCheck, type SetupState, setupState } from './setup'
 import { FILES_BASE, useCustomizations } from './customize'
 import { type Offer, useUpdateOffer } from './update'
@@ -52,8 +59,16 @@ export function Companion() {
       .catch((e: unknown) => setSetupError(String(e)))
   }, [])
   useShowWhenReady(setup !== null || setupError !== null)
+  // Over the onboarding or the room, whichever is up: a map's preparation stopped by the game starting.
+  const [gameStopped, closeGameStopped] = useGameStopped(status)
 
   if (!setup) return <div className="cp-blank">{setupError ?? ''}</div>
+  const over = gameStopped && (
+    <GameStoppedSheet
+      cw={companionWords(chosenLanguage(settings.settings?.language, setup.language))}
+      close={closeGameStopped}
+    />
+  )
   if (!setup.finished && !tutorial) {
     // The onboarding set the game up: what's set up is read again (the companion read it before), then its
     // tutorial.
@@ -62,7 +77,7 @@ export function Companion() {
         .then(setSetup, () => {})
         .finally(() => setTutorial(start))
     }
-    return <Onboarding initial={setup} status={status} settings={settings} onFinished={onboarded} />
+    return <Onboarding initial={setup} status={status} settings={settings} onFinished={onboarded} over={over} />
   }
   return (
     <Room
@@ -75,6 +90,7 @@ export function Companion() {
         setTutorial(null)
         setupState().then(setSetup, () => setSetup({ ...setup, finished: true }))
       }}
+      over={over}
     />
   )
 }
@@ -119,6 +135,7 @@ function Room({
   settings,
   tutorial = null,
   tutorialDone,
+  over,
 }: {
   setup: SetupState
   /** What's set up read again (a game installed into from the Setup page). */
@@ -128,6 +145,8 @@ function Room({
   /** The tutorial, from where it starts; `null`: the companion. */
   tutorial?: 'lesson' | 'launch' | null
   tutorialDone?: () => void
+  /** A sheet over everything (`GameStoppedSheet`). */
+  over?: ReactNode
 }) {
   const code = chosenLanguage(settings.settings?.language, setup.language)
   const words = wordsFor(code)
@@ -162,7 +181,6 @@ function Room({
   // The player's wallpapers and icon sets, for Customize and the room's screen.
   const { custom, refresh: refreshCustom } = useCustomizations()
   const [updateShown, setUpdateShown] = useState(false)
-  // The window's close button was pressed: the sheet asks whether WestPlay really goes (FIXES §73).
   const offered = useRef<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const arrived = useRef(performance.now() + ARRIVE_MS)
@@ -261,7 +279,6 @@ function Room({
     setUpdateShown(true)
   }, [update, phase])
 
-
   // The maps being prepared, worked out once: the Map page's bar and the sidebar show the same.
   const mapProgress = useMapProgress(status)
   const page = {
@@ -293,6 +310,7 @@ function Room({
       style={{ '--section-glow': SECTION_GLOW[section] } as CSSProperties}
       onPointerMove={tilt}
     >
+      <WindowControls cw={cw} />
       <TruckScreen frame={demo.frame} ready={demo.ready} pose={pose} glow={glow} banner={banner} scanning={scanning}>
         <GlassCursor
           x={cursor?.x ?? 640}
@@ -365,6 +383,7 @@ function Room({
               <UpdateSheet cw={cw} offer={update} close={() => setUpdateShown(false)} />
             )}
             {phase === 'room' && <FinishUpdate cw={cw} setup={setup} />}
+            {over}
           </ScreenContext.Provider>
         </RoomText.Provider>
       </WordsContext.Provider>
@@ -425,14 +444,9 @@ function SectionList({
     controls: keyName,
     customize: '',
     accounts:
-      signedIn.bilibili === null && signedIn.netease === null && signedIn.qqMusic === null && signedIn.appleMusic === null
+      signedIn.youtube === null && signedIn.spotify === null && signedIn.appleMusic === null
         ? ''
-        : [
-            signedIn.bilibili && 'Bilibili',
-            signedIn.netease && 'NetEase Cloud Music',
-            signedIn.qqMusic && 'QQ Music',
-            signedIn.appleMusic && 'Apple Music',
-          ]
+        : [signedIn.youtube && 'YouTube', signedIn.spotify && 'Spotify', signedIn.appleMusic && 'Apple Music']
             .filter(Boolean)
             .join(', ') || cw.values.none,
     map: mapValue(status, mapProgress, cw, words),
@@ -518,13 +532,6 @@ const SOCIALS: { site: Social; name: string; glyph: string }[] = [
     glyph:
       'M22.957 7.21c-.004-3.064-2.391-5.576-5.191-6.482-3.478-1.125-8.064-.962-11.384.604C2.357 3.231 1.093 7.391 1.046 11.54c-.039 3.411.302 12.396 5.369 12.46 3.765.047 4.326-4.804 6.068-7.141 1.24-1.662 2.836-2.132 4.801-2.618 3.376-.836 5.678-3.501 5.673-7.031Z',
   },
-  {
-    // 爱发电 (afdian.com): the Chinese players' own way of supporting WestPlay (owner 2026-11-12).
-    site: 'afdian',
-    name: '爱发电 · Afdian',
-    glyph:
-      'M9 14.234a.567.567 0 1 0 0 1.134.567.567 0 0 0 0-1.134m5.351 1.705a.567.567 0 1 0 0 1.135.567.567 0 0 0 0-1.135m8.401 1.436c-.189.095-.461.1-.713.013-.169-.06-.352-.116-.534-.172-.339-.104-.904-.276-1.011-.407a.533.533 0 1 0-.853.643c.059.08.139.146.22.209-.816 1.131-4.398 3.382-9.464 2.273-2.283-.5-3.819-1.413-4.444-2.639-.451-.885-.348-1.797-.133-2.293.62-1.29 5.097-4.261 7.955-5.943a.537.537 0 0 0 .188-.733c-.149-.254-.49-.356-.73-.189-.231.135-1.015.601-2.015 1.236-.338-.227-.923-.508-1.86-.6-1.486-.148-4.92-.805-6.029-1.275C2.535 7.162.731 6.27 1.131 5.267c.092-.234.527-.613 1.47-.974a8.5 8.5 0 0 1 1.995-.492l-.212.103c-.642.312-1.343.662-1.813 1.075-.034-.022-.07-.044-.094-.069a.527.527 0 0 0-.754-.017.533.533 0 0 0-.017.756c.19.2.471.35.829.465l.039.014c1.245.383 3.458.336 6.578.211 1.345-.052 2.615-.102 3.674-.082 3.512.07 6.152 1.469 8.07 4.279 1.178 1.725.753 3.426.079 4.903a1.4 1.4 0 0 1-.231-.222.54.54 0 0 0-.75-.085.535.535 0 0 0-.086.751c.109.137.665.778 1.355.724l.037-.002c.021-.003.042.001.064-.003.472-.086.768-.063 1.045.111.367.232.547.37.511.485-.021.073-.076.125-.168.177M8.19 11.418l-.315.231a1.6 1.6 0 0 1-.243-.32c.123-.038.33.007.558.089m14.733 4.356a1.9 1.9 0 0 0-.81-.27c.632-1.544 1.034-3.565-.336-5.572-2.096-3.072-5.101-4.668-8.93-4.744-1.091-.022-2.377.029-3.737.083-1.58.063-3.683.145-5.112.027.285-.155.588-.304.851-.431 1.006-.49 1.797-.872 1.535-1.548-.137-.396-.547-.603-1.219-.618C3.748 2.669.688 3.489.138 4.872c-.31.779-.361 2.282 2.775 3.61 1.29.548 4.934 1.216 6.341 1.355.397.039.701.119.931.205a75 75 0 0 0-.986.664c-.577-.329-1.521-.718-2.226-.237a.94.94 0 0 0-.435.768c-.01.385.224.763.486 1.066-1.038.83-1.877 1.634-2.175 2.253-.332.762-.467 2.008.153 3.224.786 1.544 2.524 2.62 5.166 3.199 3.454.755 6.437.075 8.411-.966 1.099-.579 1.878-1.27 2.257-1.887l.356.113c.169.051.338.103.496.159.522.181 1.1.157 1.545-.068l.025-.013c.336-.177.577-.46.683-.803.285-.922-.528-1.432-1.018-1.74',
-  }
 ]
 
 function mapValue(status: HostStatus | null, progress: MapProgress, cw: CompanionWords, words: Words): string {

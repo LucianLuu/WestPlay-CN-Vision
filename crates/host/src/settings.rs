@@ -35,6 +35,10 @@ pub struct Settings {
     pub sound: SoundSettings,
     #[serde(deserialize_with = "lenient")]
     pub map: MapSettings,
+    /// 主窗口怎么开、关掉之后还在不在（3.0 的「选项」页）：开机时不弹窗、最小化或关闭
+    /// 之后留在托盘。两个都开就是「启动即进托盘」。
+    #[serde(deserialize_with = "lenient")]
+    pub window: WindowSettings,
     #[serde(deserialize_with = "lenient")]
     pub mobile_web_ui: bool,
     /// The language WestPlay speaks, in the cab and the companion (the companion's Setup page): one of the
@@ -66,6 +70,19 @@ impl<'de> Deserialize<'de> for LanguageCode {
         let code = String::deserialize(deserializer)?;
         Self::new(&code).ok_or_else(|| serde::de::Error::custom(format!("not a language: {code}")))
     }
+}
+
+/// 主窗口怎么开：开机时是否直接显示，最小化/关闭之后是否留在托盘。
+///
+/// 3.0 的「选项」页要用它（`settings.window.startMinimised` / `settings.window.tray`）：
+/// 少了这个字段，那个页面读到 `undefined` 就整页崩掉（一点「选项」就黑屏）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WindowSettings {
+    /// 开机时不弹主窗口，直接进任务栏（与 `tray` 同开则直接进托盘）。
+    pub start_minimised: bool,
+    /// 最小化或关闭主窗口之后仍留在托盘里运行；托盘图标可以再叫回来或退出。
+    pub tray: bool,
 }
 
 /// The cab's map (the companion's Map page): whether its buildings rise from it, and its bridges and ramps; and
@@ -150,6 +167,36 @@ impl SoundSettings {
 pub struct GraphicsSettings {
     #[serde(deserialize_with = "lenient")]
     pub gpu: Option<String>,
+    /// 车机屏幕画多少帧（3.0 的「卡车屏幕」页，`30` / `60` / `display`）。
+    /// 3.0 的主窗口读它，少了这个字段那一页会崩。
+    #[serde(deserialize_with = "lenient")]
+    pub frame_rate: FrameRate,
+}
+
+/// 车机屏幕画的帧率：30、60，或者跟着它自己那块屏。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FrameRate {
+    /// 每秒 30 帧。
+    #[serde(rename = "30")]
+    Fps30,
+    /// 每秒 60 帧：默认。
+    #[default]
+    #[serde(rename = "60")]
+    Fps60,
+    /// 那块屏自己的刷新率。
+    #[serde(rename = "display")]
+    Display,
+}
+
+impl FrameRate {
+    /// 落到具体的帧数（`display` 时就是屏幕的刷新率）。
+    pub fn fps(self, display_hz: u32) -> u32 {
+        match self {
+            Self::Fps30 => 30,
+            Self::Fps60 => 60,
+            Self::Display => display_hz.max(1),
+        }
+    }
 }
 
 /// How the screen looks: its wallpaper (chosen in the cab's Settings or the companion's Customize) and its

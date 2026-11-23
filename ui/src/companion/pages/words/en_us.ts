@@ -68,9 +68,6 @@ export const words: CompanionWords = {
     gpuInUse: 'In use',
     gpuNote: 'If the screen stutters, pick another card. WestPlay starts again on it.',
     coachSpeakers: 'Coach speakers',
-    display: 'Truck Screen',
-    displayFirst: 'WestPlay tablet',
-    displayFirstDetail: 'WestPlay fills the tablet first, even in a truck whose own screen shows it.',
     coachDriver: 'Driver’s speakers',
     coachDriverDetail: 'The speakers at the driver’s seat',
     coachPassengers: 'Passengers’ speakers',
@@ -81,7 +78,7 @@ export const words: CompanionWords = {
       'In a coach, the passengers’ speakers all play at once. On a weak processor, the game can stutter with them.',
     elevated: {
       title: 'The game is running as administrator',
-      text: 'The updated game plugin makes navigation available to WestPlay. Windows may still limit access to live weather.',
+      text: 'WestPlay can’t see its route, guidance or weather then. Start the game normally, not as administrator.',
     },
     banners: {
       live: { title: 'Connected', text: 'WestPlay is on your truck’s screen' },
@@ -159,17 +156,6 @@ export const words: CompanionWords = {
     },
   },
   setup: {
-    mobileWebUi: {
-      title: 'Mobile WebUI',
-      detail: 'View and control the cab from a phone browser on the same trusted local network.',
-      starting: 'Starting the LAN service…',
-      unavailable: 'LAN service unavailable (TCP 8765). If the port is in use, free it and turn the switch off and on.',
-      noAddress: 'No private IPv4 address found. Connect to the local network and turn the switch off and on.',
-      copied: 'Pairing link copied',
-      copy: 'Click to copy the link, then send it to your phone and open it',
-      link: 'Pairing link',
-      keepPrivate: 'Keep the pairing link private.',
-    },
     title: 'Setup',
     sub: 'Where WestPlay is installed, and how to put it right if something goes wrong.',
     game: 'Your Game',
@@ -345,4 +331,11 @@ export const words: CompanionWords = {
     button: 'Support on Kreosus',
     note: 'Opens Kreosus in your browser.',
   },
+  trayOpen: 'Open WestPlay',
+  trayQuit: 'Quit WestPlay',
+  window: {
+    minimise: 'Minimise',
+    close: 'Close',
+  },
+
 }

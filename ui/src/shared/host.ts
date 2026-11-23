@@ -1300,13 +1300,7 @@ declare global {
 /** The cabin page as a live demo in the companion's onboarding (`cabin.html?demo`): never the host's page,
  * even inside a WebView2 (the companion's own). See cabin/demo.ts. */
 export const IS_DEMO =
-  typeof document !== 'undefined' &&
-  // ① A plain browser: the query says so. ② The companion's screen: its page is `cabin-demo.html`,
-  // which carries the mark in its own head (vite.config.ts, demoPage) — the query can't reach a page
-  // served from a folder (WebView2's virtual host), and the frame is another profile, so neither the
-  // URL nor window.name nor localStorage can carry it.
-  (new URLSearchParams(location.search).has('demo') ||
-    document.querySelector('meta[name="westplay-demo"]') !== null)
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')
 
 /** Whether the page runs inside the WestPlay host (and not in a plain browser preview, nor as the demo). */
 export function isInHost(): boolean {

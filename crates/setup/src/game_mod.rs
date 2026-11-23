@@ -500,6 +500,52 @@ pub fn game_screens_current(game: &GameFiles, built: &Path) -> bool {
     BUS_SCREENS.iter().all(|&(path, _)| same(path, sized.iter().find(|(at, _)| at == path).map(|(_, bytes)| bytes)))
 }
 
+/// Which layouts can be drawn in this game: the same judgement [`build`] makes — each layout's scripts
+/// read, its own screen made, the tablet's trucks found — without making any of the files.
+///
+/// [`build`] builds the whole mod to answer this, and its textures are 1280 x 720 x 4 bytes for each of
+/// the 18 layouts: 63 MB in all, held at once. The Setup's check only ever wanted this list (the trucks'
+/// `ready`/`notYet`), and a player with 119 mods had the page's process die every time right after it
+/// (WebView2's STATUS_BREAKPOINT, 2026-11-22), so the check asks here instead.
+///
+/// What it does not do is report a bad game: a layout whose script is there but which fails to patch is
+/// missing here and an error in [`build`]. That difference shows at Install, where a mod that can't be
+/// built says why.
+pub fn patched_only(game: &GameFiles) -> Vec<&'static str> {
+    let mut patched = Vec::new();
+    for (index, layout) in screen_layouts().iter().enumerate() {
+        let rows = ScreenLayout::texture_height(index);
+        // The tablet: its model shows the texture, whole or missing. Which trucks it has is read from
+        // the game, and their hanging points, both reads.
+        if layout.id == TABLET {
+            if let Ok(spots) = crate::tablet::trucks(game) {
+                let pitches = crate::tablet::hanging_pitches(game, &spots);
+                if crate::tablet::files(&spots, &pitches, "/ui/dashboard/westplay.dds", rows).is_ok()
+                {
+                    patched.push(layout.id);
+                }
+            }
+            continue;
+        }
+        // A screen of WestPlay's own making: whole, or missing.
+        if let Some(own) = OWN_SCREENS.iter().find(|own| own.layout == layout.id) {
+            if let [script] = layout.gps_scripts {
+                if own_screen_files(game, own, script, "westplay", rows).is_ok() {
+                    patched.push(layout.id);
+                }
+            }
+            continue;
+        }
+        // Each of its scripts the game has (a layout whose scripts it has none of is missing).
+        if let Ok(scripts) = game_screen_scripts(game, index) {
+            if !scripts.is_empty() {
+                patched.push(layout.id);
+            }
+        }
+    }
+    patched
+}
+
 /// Writes the mod into `mod_dir` (WestPlay's own folder), replacing the one there whole: written beside it
 /// first, then moved over it, so the plugin never finds half a file.
 /// A step that failed names itself and its path (`writing C:\…\WestPlay\westplay.scs.partial: …`), so a
@@ -1585,4 +1631,32 @@ ui::text : _nameless._.map {
         drop(archive);
         let _ = std::fs::remove_file(path);
     }
+
+    #[test]
+    fn the_check_reads_which_layouts_a_game_has_without_making_the_mod() {
+        // The Setup's check used to build the whole mod to learn this, textures and all: 63 MB for 18
+        // layouts, and a game with 119 mods had the page die right after every check (2026-11-22).
+        let (game, root) = a_game_with_a_script();
+        let patched = patched_only(&game);
+        // Only layouts that exist, and only ones whose scripts this game has.
+        assert!(patched.iter().all(|id| screen_layouts().iter().any(|l| l.id == *id)));
+        // Nothing of the mod is made: this is a read, and it answers with names, not bytes.
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A game folder holding one GPS script the generic layout asks for.
+    fn a_game_with_a_script() -> (GameFiles, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("westplay-check-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Euro Truck Simulator 2");
+        std::fs::create_dir_all(&dir).unwrap();
+        for script in screen_layouts()[0].gps_scripts {
+            let path = dir.join(script);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, SCRIPT).unwrap();
+        }
+        let game = GameFiles::install(&dir).unwrap();
+        (game, root)
+    }
+
 }

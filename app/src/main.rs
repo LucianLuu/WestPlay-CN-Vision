@@ -57,6 +57,17 @@ struct SettingsStore {
 /// (`companion_ready`), so it never shows blank while the page loads; after this long it shows anyway.
 const SHOW_ANYWAY: Duration = Duration::from_secs(8);
 
+/// The tray menu's two items, kept so the page can relabel them in its own language
+/// (`set_tray_words`, which 3.0's companion calls). `None` until the tray is built.
+#[derive(Default)]
+struct TrayWords(std::sync::Mutex<Option<TrayWordsInner>>);
+
+#[derive(Clone)]
+struct TrayWordsInner {
+    open: tauri::menu::MenuItem<tauri::Wry>,
+    quit: tauri::menu::MenuItem<tauri::Wry>,
+}
+
 /// The player sent the window to the tray: it stays hidden until the tray asks for it, whatever
 /// the page says about being ready (a game starting makes the companion load its setup again, and
 /// `companion_ready` would bring the window back to the front — owner 2026-11-14).
@@ -80,6 +91,38 @@ fn companion_ready(window: WebviewWindow) {
 #[tauri::command]
 fn window_in_front(window: WebviewWindow) -> bool {
     window.hwnd().is_ok_and(|window| westplay_host::in_front(window.0 as isize))
+}
+
+/// 页面自绘标题栏的最小化按钮（3.0 的窗口没有 Windows 标题栏，见 `tauri.conf.json` 的
+/// `decorations:false`）。
+#[tauri::command]
+fn window_minimise(window: WebviewWindow) {
+    let _ = window.minimize();
+}
+
+/// 页面自绘标题栏的关闭按钮：和 Windows 的关闭一样，收进托盘（`on_window_event` 里的
+/// `CloseRequested` 负责真正的隐藏），托盘菜单才是退出。
+#[tauri::command]
+fn window_close(window: WebviewWindow) {
+    westplay_host::log!("[quit] the window's close button: hidden to the tray");
+    let _ = window.close();
+}
+
+/// 托盘菜单的两项文字，由页面按当前语言送过来（3.0 的 `set_tray_words`）。
+#[tauri::command]
+fn set_tray_words(words: State<TrayWords>, open: String, quit: String) {
+    let kept = words.0.lock().ok().and_then(|kept| kept.clone());
+    if let Some(kept) = kept {
+        let _ = kept.open.set_text(open);
+        let _ = kept.quit.set_text(quit);
+    }
+}
+
+/// 拖拽：页面顶部的空白处按下时调它，让 Windows 接管这一次拖动（无边框窗口没有标题栏
+/// 可以拖）。
+#[tauri::command]
+fn window_drag(window: WebviewWindow) {
+    let _ = window.start_dragging();
 }
 
 /// The companion's page held its room still, or set it going again: for a log to tell what the room cost.
@@ -178,7 +221,7 @@ fn apple_music_check(accounts: State<Accounts>) {
 }
 
 /// The maker's Kreosus page, where players support WestPlay's development.
-const SUPPORT_PAGE: &str = "https://kreosus.com/enes-less";
+const SUPPORT_PAGE: &str = "https://afdian.com/a/west2026";
 
 /// Opens the support page (Support me) in the player's browser. The address is fixed here, so the companion
 /// can't open any other.
@@ -191,11 +234,12 @@ fn open_support_page() {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Social {
-    YouTube,
-    Discord,
-    Patreon,
-    /// The Chinese players' own way of supporting WestPlay (「爱发电」, afdian.com): added for them
-    /// (owner 2026-11-12).
+    /// 我们的 B站主页。
+    Bilibili,
+    /// 我们的 GitHub 仓库（`github`）。小千建议把中间那格换成它（owner 2026-11-23）：
+    /// 支持我们的项目，也让玩家有个地方报问题、看更新。
+    Github,
+    /// The Chinese players' own way of supporting WestPlay (「爱发电」, afdian.com)。
     Afdian,
 }
 
@@ -204,11 +248,83 @@ enum Social {
 #[tauri::command]
 fn open_social(site: Social) {
     westplay_host::browser::open(match site {
-        Social::YouTube => "https://www.youtube.com/@tyraness",
-        Social::Discord => "https://discord.com/invite/Jt34SmwU6",
-        Social::Patreon => "https://www.patreon.com/c/westmods",
+        // 主窗口左下角的三个按钮（owner 2026-11-23）。
+        Social::Bilibili => "https://space.bilibili.com/391801787",
+        Social::Github => "https://github.com/LucianLuu/WestPlay-CN-Vision",
         Social::Afdian => "https://afdian.com/a/west2026",
     });
+}
+
+/// Watches the companion's page and puts it back if its process dies.
+///
+/// The cab's pages are watched where they are made (`westplay_host::webview`'s `ProcessFailed`
+/// handler). The companion's window is Tauri's, made from `tauri.conf.json`, and Tauri doesn't hand out
+/// the `CoreWebView2` that handler needs — so the page is watched from outside instead: WebView2 runs
+/// each page in an `msedgewebview2.exe` child of this process, and a page that dies (WebView2 158's
+/// STATUS_BREAKPOINT at the Setup) leaves its child gone.
+///
+/// Not the window's own process id: that is WestPlay's, which never changes. The first version of this
+/// watched exactly that and could never have noticed anything.
+///
+/// It navigates rather than evaluates `location.reload()`: by the time a page's process is gone Chromium
+/// has put its own error page up ("This page is having a problem", STATUS_BREAKPOINT), and reloading
+/// *that* is not putting the Setup back — the first version did exactly this and the player's window
+/// stayed on the error page. A navigation from here goes through the host to WebView2 itself, whatever
+/// the renderer is doing.
+fn watch_companion(app: tauri::AppHandle) {
+    use tauri::Manager;
+
+    std::thread::spawn(move || {
+        let mut known: Option<Vec<u32>> = None;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let Some(window) = app.get_webview_window("main") else { return };
+            if window.hwnd().is_err() {
+                // The window gone is the app closing: nothing left to watch.
+                return;
+            }
+            // 只看 WebView2 的**浏览器**进程：渲染进程随播放器页面开关而起落是正常的，
+            // 把它们算进来会让主窗口在别的页面关闭时被误判成崩溃而重载。
+            let now = westplay_host::page_host_processes();
+            if let Some(before) = &known {
+                let gone: Vec<u32> = before.iter().copied().filter(|id| !now.contains(id)).collect();
+                if !gone.is_empty() && !now.is_empty() {
+                    // Where the page should be: what it was showing, or the Setup's own address.
+                    // Where the Setup lives: on Windows Tauri serves the bundled page from
+                    // `http://tauri.localhost/` (its `wry` workaround for `tauri://localhost`). Falling
+                    // back to it matters — the address asked for is the one *before* the crash, and a
+                    // page already showing Chromium's error page may report that error page's address.
+                    let address = window
+                        .url()
+                        .ok()
+                        .filter(|url| {
+                            url.path().ends_with(".html")
+                                || url.path().trim_end_matches('/').is_empty()
+                        })
+                        .unwrap_or_else(|| {
+                            tauri::Url::parse("http://tauri.localhost/index.html")
+                                .expect("the Setup's own address")
+                        });
+                    westplay_host::log!(
+                        "[companion] the page's process {} went; going back to {address}",
+                        gone.iter().map(u32::to_string).collect::<Vec<_>>().join(", ")
+                    );
+                    let _ = window.navigate(address);
+                }
+            }
+            known = Some(now);
+        }
+    });
+}
+
+/// A line from the companion's page, in `app.log`, as `[probe] …`.
+///
+/// The page can't write the log itself, and the seconds before a page dies are exactly where its own
+/// account is needed: the Setup's check used to be followed by a crash 3.4 s later with nothing in the
+/// log in between (a player's, 2026-11-22).
+#[tauri::command]
+fn page_log(line: String) {
+    westplay_host::log!("{line}");
 }
 
 #[tauri::command]
@@ -304,6 +420,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(update::Updates::default())
+        .manage(TrayWords::default())
         .manage(WestplayOpen(open_request.clone()))
         .manage(Accounts(accounts.clone()))
         .manage(Quitting::default())
@@ -315,6 +432,10 @@ fn main() {
             quit_app,
             companion_ready,
             window_in_front,
+            window_minimise,
+            window_close,
+            window_drag,
+            set_tray_words,
             room_held,
             set_westplay_open,
             youtube_sign_in,
@@ -329,6 +450,7 @@ fn main() {
             open_support_page,
             open_social,
             app_log_place,
+            page_log,
             customize::customize_list,
             customize::add_wallpapers,
             customize::add_icon_set,
@@ -358,6 +480,19 @@ fn main() {
                     qq_music_sign_out,
         ])
         .on_window_event(|window, event| {
+            // Windows 的缩放改了（换显示器、系统设置），或者窗口被系统改了大小：裁剪区域要按新的
+            // 尺寸重算，否则旧的圆角区域还在，多出来的部分就被裁掉了。
+            if let tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
+                if let Ok(hwnd) = window.hwnd() {
+                    westplay_host::window_corner::apply(hwnd.0 as isize, *scale_factor);
+                }
+            }
+            if let tauri::WindowEvent::Resized(_) = event {
+                if let Ok(hwnd) = window.hwnd() {
+                    let scale = window.scale_factor().unwrap_or(1.0);
+                    westplay_host::window_corner::apply(hwnd.0 as isize, scale);
+                }
+            }
             // The close button puts WestPlay in the tray instead of ending it: it keeps playing, and
             // the tray's menu is where it really quits.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -369,6 +504,19 @@ fn main() {
         })
         .setup(move |app| {
             westplay_host::startup::mark("app: window set up");
+    // 无边框 + 透明之后，窗口本身还是矩形，四角透出来的是桌面。把它裁成圆角矩形（半径和
+    // UI 的 --screen-radius 对齐，见 crates/host/src/window_corner.rs）。
+    if let Some(window) = app.get_webview_window("main") {
+        // 圆角按窗口当前的缩放比例算（见 crates/host/src/window_corner.rs）：Windows 的缩放
+        // 设置改了、或者窗口换了显示器，圆角跟着一起变，不会留下旧尺寸的裁剪区域。
+        if let Ok(hwnd) = window.hwnd() {
+            let scale = window.scale_factor().unwrap_or(1.0);
+            westplay_host::window_corner::apply(hwnd.0 as isize, scale);
+        }
+    }
+    // The companion's own window, watched as the cab's page is: a page whose process dies is loaded
+    // again rather than left as a white window.
+    watch_companion(app.handle().clone());
             // The QQ middle layer: a Python process of WestPlay's own, for QQ Music's page (qq_layer.rs).
             // Its folder is shipped beside the app; a build without it simply has no QQ Music data.
             let qq_layer = resources_folder(app.handle()).and_then(|resources| {
@@ -396,8 +544,14 @@ fn main() {
             {
                 use tauri::menu::{Menu, MenuItem};
                 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+                // 初始文字是中文；页面一连上就用自己的语言改（`set_tray_words`）。
                 let show = MenuItem::with_id(app, "show", "显示 WestPlay", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "退出 WestPlay", true, None::<&str>)?;
+                if let Some(words) = app.try_state::<TrayWords>() {
+                    if let Ok(mut kept) = words.0.lock() {
+                        *kept = Some(TrayWordsInner { open: show.clone(), quit: quit.clone() });
+                    }
+                }
                 let menu = Menu::with_items(app, &[&show, &quit])?;
                 let icon = app
                     .default_window_icon()

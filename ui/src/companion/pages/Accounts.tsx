@@ -9,16 +9,12 @@ import {
   type HostStatus,
   appleMusicSignIn,
   appleMusicSignOut,
-  webSignIn,
-  webSignOut,
+  spotifySignIn,
+  spotifySignOut,
+  youtubeSignIn,
+  youtubeSignOut,
 } from '../useHostStatus'
 import type { PageProps } from './page'
-
-/** The sites' words, for a language that has no `webAccounts` of its own (English). */
-const WEB_WORDS: { finishInWindow: string; signingIn: Note } = {
-  finishInWindow: 'Finish signing in in the window',
-  signingIn: { title: 'Signing in', text: 'Continue in the window' },
-}
 
 /** Each service: its name, its app on the screen, its sign-in and sign-out, and what its status says. */
 const SERVICES: Record<
@@ -30,42 +26,27 @@ const SERVICES: Record<
     signIn(): Promise<void>
     signOut(): Promise<void>
     signingIn(status: HostStatus | null): boolean
-    /** Whether it can be asked whether it's signed in without being signed in to (`false`: a site, whose page
-     * says in a window of its own). */
-    checks: boolean
-    /** Its words while signing in (the sites' are the accounts' own, or `webAccounts`'). */
+    /** Its words while signing in (YouTube's are the accounts' own). */
     words(words: Words): { finishInWindow: string; signingIn: Note }
   }
 > = {
-  bilibili: {
-    name: '哔哩哔哩',
+  youtube: {
+    name: 'YouTube',
     app: 'youtube',
     glow: GLOW.youtube,
-    signIn: () => webSignIn('bilibili'),
-    signOut: () => webSignOut('bilibili'),
-    signingIn: (status) => status?.webLogins?.bilibili.signingIn ?? false,
-    checks: false,
-    words: (words) => words.webAccounts ?? WEB_WORDS,
+    signIn: youtubeSignIn,
+    signOut: youtubeSignOut,
+    signingIn: (status) => status?.youtubeSigningIn ?? false,
+    words: (words) => words.accounts,
   },
-  netease: {
-    name: '网易云音乐',
+  spotify: {
+    name: 'Spotify',
     app: 'spotify',
     glow: GLOW.spotify,
-    signIn: () => webSignIn('netease'),
-    signOut: () => webSignOut('netease'),
-    signingIn: (status) => status?.webLogins?.netease.signingIn ?? false,
-    checks: false,
-    words: (words) => words.webAccounts ?? WEB_WORDS,
-  },
-  qqMusic: {
-    name: 'QQ音乐',
-    app: 'youtubeMusic',
-    glow: GLOW.music,
-    signIn: () => webSignIn('qqMusic'),
-    signOut: () => webSignOut('qqMusic'),
-    signingIn: (status) => status?.webLogins?.qqMusic.signingIn ?? false,
-    checks: false,
-    words: (words) => words.webAccounts ?? WEB_WORDS,
+    signIn: spotifySignIn,
+    signOut: spotifySignOut,
+    signingIn: (status) => status?.spotifySigningIn ?? false,
+    words: (words) => words.spotify,
   },
   appleMusic: {
     name: 'Apple Music',
@@ -74,12 +55,11 @@ const SERVICES: Record<
     signIn: appleMusicSignIn,
     signOut: appleMusicSignOut,
     signingIn: (status) => status?.appleMusicSigningIn ?? false,
-    checks: true,
     words: (words) => words.appleMusic,
   },
 }
 
-const ORDER: Service[] = ['bilibili', 'netease', 'qqMusic', 'appleMusic']
+const ORDER: Service[] = ['youtube', 'spotify', 'appleMusic']
 
 /**
  * The services WestPlay plays from, each signed in (in its own window, on the desktop) or not. WestPlay only
@@ -87,7 +67,7 @@ const ORDER: Service[] = ['bilibili', 'netease', 'qqMusic', 'appleMusic']
  */
 export function Accounts({ status, cw, signedIn }: PageProps) {
   const words = useWords()
-  const [shown, setShown] = useState<Service>('bilibili')
+  const [shown, setShown] = useState<Service>('youtube')
   const signingIn = ORDER.find((service) => SERVICES[service].signingIn(status)) ?? null
   const service = SERVICES[signingIn ?? shown]
   useScreenAt(service.app, service.glow, signingIn ? banner(service.words(words).signingIn, true) : null)
@@ -121,8 +101,7 @@ function Account({
   const known = all[service]
   const signedIn = known ?? false
   const signingIn = s.signingIn(status)
-  // A site says when its window signs in: nothing to check, so nothing to wait for.
-  const checking = known === null && s.checks
+  const checking = known === null
   const signOut = useSignOut(signedIn, s.signOut)
   return (
     <Row

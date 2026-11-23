@@ -73,12 +73,9 @@ export const words: CompanionWords = {
     coachPassengersDetail: '座位上方的全部扬声器',
     coachNote: '这辆大巴的乘客扬声器：{n} 个，全部同时播放。处理器较弱时，游戏可能会卡顿。',
     coachNoteAny: '在大巴中，乘客扬声器全部同时播放。处理器较弱时，游戏可能会卡顿。',
-    display: '屏幕显示',
-    displayFirst: '优先显示在平板',
-    displayFirstDetail: 'WestPlay 优先显示在平板上，即使卡车自己的屏幕也显示它。',
     elevated: {
       title: '游戏正以管理员身份运行',
-      text: '更新游戏插件后，WestPlay 用普通权限也能读取路线。实时天气仍可能受系统权限限制。',
+      text: '这样 WestPlay 无法读取游戏的路线、导航和天气。请正常启动游戏，不要以管理员身份运行。',
     },
     banners: {
       live: { title: '已连接', text: 'WestPlay 已显示在卡车屏幕上' },
@@ -154,17 +151,6 @@ export const words: CompanionWords = {
     },
   },
   setup: {
-    mobileWebUi: {
-      title: '手机远程车机（Mobile WebUI）',
-      detail: '用同一可信局域网中的手机浏览器查看和触控车机。',
-      starting: '正在启动局域网服务…',
-      unavailable: '局域网服务不可用（TCP 8765）。如端口被占用，请释放端口后关闭再开启。',
-      noAddress: '未找到局域网 IPv4 地址。连接局域网后关闭再开启。',
-      copied: '已复制配对链接',
-      copy: '单击复制链接地址发到手机打开',
-      link: '配对链接',
-      keepPrivate: '请勿公开分享配对链接。',
-    },
     title: '设置',
     sub: 'WestPlay 安装在哪里，以及出问题时如何修复。',
     game: '游戏',
@@ -346,4 +332,11 @@ export const words: CompanionWords = {
     button: '在 Kreosus 上支持',
     note: '将在浏览器中打开 Kreosus。',
   },
+  trayOpen: '打开 WestPlay',
+  trayQuit: '退出 WestPlay',
+  window: {
+    minimise: '最小化',
+    close: '关闭',
+  },
+
 }

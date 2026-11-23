@@ -82,11 +82,8 @@ export interface CompanionWords {
     coachPassengersDetail: string
     coachNote: string
     coachNoteAny: string
-  /** Which screen WestPlay fills first: the truck's own, or WestPlay's tablet. */
-  display: string
-  displayFirst: string
-  displayFirstDetail: string
-    /** The game runs as administrator, which can limit information read directly by WestPlay. */
+    /** The game runs as administrator: WestPlay can't read its route, guidance or weather (owner 2026-10-28:
+     * WestPlay doesn't reach into an elevated game; the player is told). */
     elevated: { title: string; text: string }
     banners: {
       live: { title: string; text: string }
@@ -159,17 +156,6 @@ export interface CompanionWords {
     memory: { title: string; banner: { title: string; text: string }; note: { title: string; text: string } }
   }
   setup: {
-    mobileWebUi: {
-      title: string
-      detail: string
-      starting: string
-      unavailable: string
-      noAddress: string
-      copied: string
-      copy: string
-      link: string
-      keepPrivate: string
-    }
     title: string
     sub: string
     game: string
@@ -265,14 +251,11 @@ export interface CompanionWords {
     button: string
     note: string
   }
-  /** The window’s close button, asked about first: quitting WestPlay stops it and leaves the truck’s screen to
-   * the game, so one stray press would be felt. */
-  quit?: {
-    title: string
-    text: string
-    cancel: string
-    confirm: string
-  }
+  /** The tray menu's two items (3.0: `set_tray_words`). */
+  trayOpen: string
+  trayQuit: string
+  /** The window's own two buttons: 3.0's window has no Windows title bar. */
+  window: { minimise: string; close: string }
 }
 
 export interface UninstallWords {

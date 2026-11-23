@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react'
-import { type HostStatus, appleMusicCheck } from './useHostStatus'
+import { type HostStatus, appleMusicCheck, spotifyCheck, youtubeCheck } from './useHostStatus'
 
 /**
- * Whether each service is signed in, as the companion last knew: the sites the apps show are the host's word (a
- * sign-in window says when one is done, and WestPlay keeps that while it runs), Apple Music's is its own player's.
- * Only whether, nothing else of the account, in the companion's own storage (gone with WestPlay when it's
- * uninstalled). Apple Music never known is asked once, as the companion opens: run hidden to say.
+ * Whether each service is signed in, as the companion last knew: shown at once when it opens, kept up to date
+ * by every status that says (a sign-in or out here, or the service run in the cab). Only whether, nothing
+ * else of the account, in the companion's own storage (gone with WestPlay when it's uninstalled). A service
+ * never known is asked once, as the companion opens: run hidden to say.
  */
 export interface SignedIn {
-  bilibili: boolean | null
-  netease: boolean | null
-  qqMusic: boolean | null
+  youtube: boolean | null
+  spotify: boolean | null
   appleMusic: boolean | null
 }
 
 export type Service = keyof SignedIn
 
-const SERVICES: Service[] = ['bilibili', 'netease', 'qqMusic', 'appleMusic']
+const SERVICES: Service[] = ['youtube', 'spotify', 'appleMusic']
 
 const KEY = 'westplay.companion.signedIn'
 
@@ -28,12 +27,7 @@ function kept(): SignedIn {
     // Nothing kept: each is asked.
   }
   const known = (service: Service) => (typeof value?.[service] === 'boolean' ? (value[service] as boolean) : null)
-  return {
-    bilibili: known('bilibili'),
-    netease: known('netease'),
-    qqMusic: known('qqMusic'),
-    appleMusic: known('appleMusic'),
-  }
+  return { youtube: known('youtube'), spotify: known('spotify'), appleMusic: known('appleMusic') }
 }
 
 function keep(value: SignedIn) {
@@ -47,37 +41,35 @@ function keep(value: SignedIn) {
 /** What's known now: the status's, else what was kept (saved again whenever a status says). */
 export function useSignedIn(status: HostStatus | null): SignedIn {
   const [known] = useState(kept)
-  const site = (service: 'bilibili' | 'netease' | 'qqMusic') => status?.webLogins?.[service]?.signedIn ?? null
   const now: SignedIn = {
-    bilibili: site('bilibili'),
-    netease: site('netease'),
-    qqMusic: site('qqMusic'),
+    youtube: status?.youtubeSignedIn ?? null,
+    spotify: status?.spotifySignedIn ?? null,
     appleMusic: status?.appleMusicSignedIn ?? null,
   }
   useEffect(() => {
     if (SERVICES.every((service) => now[service] === null)) return
     const before = kept()
     keep({
-      bilibili: now.bilibili ?? before.bilibili,
-      netease: now.netease ?? before.netease,
-      qqMusic: now.qqMusic ?? before.qqMusic,
+      youtube: now.youtube ?? before.youtube,
+      spotify: now.spotify ?? before.spotify,
       appleMusic: now.appleMusic ?? before.appleMusic,
     })
-    // Keyed by the four answers (`now` itself is new at every render).
+    // Keyed by the three answers (`now` itself is new at every render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now.bilibili, now.netease, now.qqMusic, now.appleMusic])
+  }, [now.youtube, now.spotify, now.appleMusic])
   return {
-    bilibili: now.bilibili ?? known.bilibili,
-    netease: now.netease ?? known.netease,
-    qqMusic: now.qqMusic ?? known.qqMusic,
+    youtube: now.youtube ?? known.youtube,
+    spotify: now.spotify ?? known.spotify,
     appleMusic: now.appleMusic ?? known.appleMusic,
   }
 }
 
-/** As the companion opens: Apple Music, never known yet, is run hidden to say. The sites' pages say when their
- * sign-in window signs in: nothing to ask of them. */
+/** As the companion opens: each service never known yet is run, hidden, to say. */
 export function useAskOnce(): void {
   useEffect(() => {
-    if (kept().appleMusic === null) appleMusicCheck().catch(() => {})
+    const known = kept()
+    if (known.youtube === null) youtubeCheck().catch(() => {})
+    if (known.spotify === null) spotifyCheck().catch(() => {})
+    if (known.appleMusic === null) appleMusicCheck().catch(() => {})
   }, [])
 }

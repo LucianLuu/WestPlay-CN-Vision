@@ -73,12 +73,9 @@ export const words: CompanionWords = {
     coachPassengersDetail: '座位上方的所有喇叭',
     coachNote: '這輛巴士的乘客喇叭：{n} 個，全部同時播放。處理器較弱時，遊戲可能會卡頓。',
     coachNoteAny: '在巴士中，乘客喇叭全部同時播放。處理器較弱時，遊戲可能會卡頓。',
-    display: '螢幕顯示',
-    displayFirst: '優先顯示在平板',
-    displayFirstDetail: 'WestPlay 優先顯示在平板上，即使卡車自己的螢幕也顯示它。',
     elevated: {
       title: '遊戲正以系統管理員身分執行',
-      text: '更新遊戲外掛後，WestPlay 以一般權限也能讀取路線。即時天氣仍可能受系統權限限制。',
+      text: '這樣 WestPlay 無法讀取遊戲的路線、導航和天氣。請以一般方式啟動遊戲，不要以系統管理員身分執行。',
     },
     banners: {
       live: { title: '已連線', text: 'WestPlay 已顯示在卡車螢幕上' },
@@ -154,17 +151,6 @@ export const words: CompanionWords = {
     },
   },
   setup: {
-    mobileWebUi: {
-      title: '手機遠端車機（Mobile WebUI）',
-      detail: '用同一個可信任區域網路中的手機瀏覽器查看並觸控車機。',
-      starting: '正在啟動區域網路服務…',
-      unavailable: '區域網路服務無法使用（TCP 8765）。若連接埠已被占用，請釋放連接埠後關閉再開啟。',
-      noAddress: '找不到區域網路 IPv4 位址。連上區域網路後關閉再開啟。',
-      copied: '已複製配對連結',
-      copy: '點擊複製連結地址，傳到手機開啟',
-      link: '配對連結',
-      keepPrivate: '請勿公開分享配對連結。',
-    },
     title: '設定',
     sub: 'WestPlay 安裝在哪裡，以及出問題時如何修復。',
     game: '遊戲',
@@ -345,4 +331,11 @@ export const words: CompanionWords = {
     button: '在 Kreosus 上支持',
     note: '將在瀏覽器中開啟 Kreosus。',
   },
+  trayOpen: '開啟 WestPlay',
+  trayQuit: '結束 WestPlay',
+  window: {
+    minimise: '最小化',
+    close: '關閉',
+  },
+
 }

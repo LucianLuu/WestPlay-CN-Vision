@@ -48,18 +48,24 @@ describe('the onboarding’s words', () => {
   })
 
   it('takes Windows’ language, as the game has it', () => {
-    // Only the three this build has words for are taken; a language it doesn't know reads English
-    // (owner 2026-11-18: the other 40 word tables were cut).
-    expect(languageOf(['tr-TR'])).toBe('en_us')
-    expect(languageOf(['de-AT'])).toBe('en_us')
-    expect(languageOf(['es-MX'])).toBe('en_us')
-    expect(languageOf(['fr-CA'])).toBe('en_us')
-    expect(languageOf(['pt-BR'])).toBe('en_us')
+    expect(languageOf(['tr-TR'])).toBe('tr_tr')
     expect(languageOf(['en-US'])).toBe('en_us')
-    expect(languageOf(['en-GB'])).toBe('en_us')
+    expect(languageOf(['en-GB'])).toBe('en_gb')
     expect(languageOf(['en'])).toBe('en_us')
+    expect(languageOf(['de-AT'])).toBe('de_de')
+    expect(languageOf(['es-MX'])).toBe('es_la')
+    expect(languageOf(['es-ES'])).toBe('es_es')
+    expect(languageOf(['fr-CA'])).toBe('fr_ca')
+    expect(languageOf(['fr-BE'])).toBe('fr_fr')
+    expect(languageOf(['pt-BR'])).toBe('pt_br')
+    expect(languageOf(['pt-PT'])).toBe('pt_pt')
     expect(languageOf(['zh-Hant-TW'])).toBe('zh_tw')
     expect(languageOf(['zh-CN'])).toBe('zh_cn')
-    expect(languageOf(['zh'])).toBe('zh_cn')
+    expect(languageOf(['sr-Latn-RS'])).toBe('sr_sp')
+    expect(languageOf(['sr-Cyrl-RS'])).toBe('sr_sr')
+    expect(languageOf(['nb-NO'])).toBe('no_no')
+    // A language the game doesn't have: the next one Windows lists, else English.
+    expect(languageOf(['xh-ZA', 'de-DE'])).toBe('de_de')
+    expect(languageOf(['xh-ZA'])).toBe('en_us')
   })
 })

@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from 'react'
 
 /** The player's settings. Mirrors `westplay_host::settings::Settings`; the app owns and saves them. */
 export interface Settings {
-  mobileWebUi: boolean
   interaction: {
     /** The key that uses the screen. */
     key: KeyCode
@@ -18,14 +17,6 @@ export interface Settings {
   keybinds: Record<KeybindId, Binding>
   screen: {
     truckStrip: TruckStrip
-    /** How often WestPlay hands the game a new frame, chosen in the cab's Settings › Display & Performance. */
-    refreshRate: RefreshRate
-    /** Whether the screen gives up some of its effects to run lighter (the Performance Mode), chosen there
-     * too: the cabin page is what applies it (`ui/src/cabin/performance.css`). */
-  /** Which of the cab's two screens WestPlay fills first: the truck's own, or WestPlay's tablet
-   *  (`westplay_host::settings::ScreenSettings::tablet_first`). */
-  tabletFirst: boolean
-    performanceMode: boolean
   }
   /** How the screen looks (Customize): a wallpaper's id and one of the player's icon sets, by name; `null`:
    * none chosen (the cab's default wallpaper, WestPlay's own icons). */
@@ -65,10 +56,6 @@ export type CoachSpeakers = 'driver' | 'passengers'
 /** Mirrors `westplay_host::settings::TruckStrip`: the truck's own strip beside WestPlay, kept or not. */
 export type TruckStrip = 'auto' | 'off'
 
-/** Mirrors `westplay_host::settings::RefreshRate`: how often WestPlay hands the game a new frame, chosen in
- * the cab's Settings › Display & Performance (`'60'` or `'30'`). */
-export type RefreshRate = '60' | '30'
-
 /** Mirrors `westplay_host::settings::KeyCode`: a key of the keyboard or a button of the mouse, as Windows
  * numbers it (its virtual-key code: 0x05 the mouse's back button, 0x31 the 1 key, 0xA4 Left Alt). */
 export type KeyCode = number
@@ -89,10 +76,12 @@ export const DEFAULT_KEY = KEY_PRESETS.leftAlt
 /** Mirrors `westplay_host::settings::InteractionMode`. */
 export type InteractionMode = 'hold' | 'toggle'
 
-/** Mirrors `westplay_host::settings::Keybinds`: the playing music's volume up and down, and play/pause. */
+/** Mirrors `westplay_host::settings::Keybinds`: the playing music's volume up and down, play/pause, and the
+ * screen's brightness down and up. */
 export type KeybindId = 'volumeUp' | 'volumeDown' | 'playPause' | 'brightnessDown' | 'brightnessUp'
 
-/** In a row as their default keys are (1, 2, 3), as on a stereo: volume down, play/pause, volume up. */
+/** In a row as their default keys are (1 to 5), as on a stereo: volume down, play/pause, volume up; then
+ * brightness down and up. */
 export const KEYBIND_IDS: KeybindId[] = ['volumeDown', 'playPause', 'volumeUp', 'brightnessDown', 'brightnessUp']
 
 /** Mirrors `westplay_host::settings::Binding`: a key, pressed alone or while using the screen (holding its

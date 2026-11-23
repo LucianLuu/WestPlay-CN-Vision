@@ -12,6 +12,9 @@ import { useCabin, useLive } from './state/store'
 import './shell/shell.css'
 import './shell/liquidGlass.css'
 import './shell/apple.css'
+// WestPlay 3.0 的视觉：Liquid Glass 的取值、iOS 27 的标签色、侧栏比例。
+// 放最后，同名变量的值以它为准。
+import './shell/glass-30.css'
 
 // Development builds expose the stores for console debugging and browser previews (`westplay.cabin`).
 if (import.meta.env.DEV) {

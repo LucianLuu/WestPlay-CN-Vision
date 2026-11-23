@@ -295,10 +295,11 @@ pub async fn check_game(dir: PathBuf, store: State<'_, SetupStore>) -> Result<Ga
             })
             .collect();
         let files = GameFiles::install(&game.dir).map_err(|e| e.to_string())?;
-        let (patched, mod_problem) = match game_mod::build(&files, &[], &cab_mark::Marks::default()) {
-            Ok((_, built)) => (built.patched, None),
-            Err(problem) => (Vec::new(), Some(problem.to_string())),
-        };
+        // Which layouts this game can have, asked of the reader alone: building the mod here to find out
+        // made the page's process die on a game with 119 mods (its 18 textures are 63 MB, WebView2's
+        // STATUS_BREAKPOINT every time, 2026-11-22). A game that can't be built says why at Install.
+        let patched = game_mod::patched_only(&files);
+        let mod_problem: Option<String> = None;
         let trucks = trucks::fit(game.kind, &files, &patched, &all_profiles, &installed)
             .into_iter()
             .map(|(truck, fit)| TruckCheck {

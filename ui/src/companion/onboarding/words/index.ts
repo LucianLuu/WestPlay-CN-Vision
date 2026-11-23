@@ -18,16 +18,6 @@ export interface Note {
   text: string
 }
 
-/** The sites the apps show (Bilibili, NetEase Cloud Music, QQ Music): their sign-in step. `title` has
- * `{name}` for the site's own name (a proper name, the same in every language). A language without these
- * shows the step in English. */
-export interface WebAccounts {
-  title: string
-  sub: string
-  finishInWindow: string
-  signingIn: Note
-}
-
 /** A count's words by the language's plural category (`{n}`: the count); `other` is always there. */
 export type Plural = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }
 
@@ -194,8 +184,6 @@ export interface Words {
     finishInWindow: string
     signingIn: Note
   }
-  /** The sites the apps show, their sign-in steps (a language may have none: `WebAccounts`). */
-  webAccounts?: WebAccounts
   launch: {
     title: string
     done: string

@@ -93,38 +93,10 @@ export function ScreenPage({ status, settings, setup, cw }: PageProps) {
           <b>{w.elevated.title}</b> {w.elevated.text}
         </Note>
       )}
-      <DisplayFirst settings={settings} cw={cw} />
-      <CoachChooser status={status} settings={settings} cw={cw} />
       <GpuChooser status={status} settings={settings} cw={cw} />
+      <CoachChooser status={status} settings={settings} cw={cw} />
       {status?.error && <Note tone="bad">{status.error}</Note>}
     </Panel>
-  )
-}
-
-/**
- * Which of the cab's two screens WestPlay fills first: the truck's own (off, as it always did, WestPlay's tablet
- * then staying blank in a truck whose own screen shows WestPlay), or WestPlay's tablet (on: the truck's own screens
- * keep the game's own). The plugin keeps whichever the player didn't name as the game's own, per frame
- * (`crates/plugin/src/screens.rs`, the bridge's `tablet_first`).
- */
-function DisplayFirst({ settings: state, cw }: Pick<PageProps, 'settings' | 'cw'>) {
-  const w = cw.screen
-  const { settings, update } = state
-  if (!settings) return null
-  return (
-    <Group title={w.display} place={6}>
-      <Row
-        title={w.displayFirst}
-        detail={w.displayFirstDetail}
-        accessory={
-          <Switch
-            on={settings.screen.tabletFirst}
-            label={w.displayFirst}
-            change={(on) => void update({ ...settings, screen: { ...settings.screen, tabletFirst: on } })}
-          />
-        }
-      />
-    </Group>
   )
 }
 
@@ -145,7 +117,7 @@ function GpuChooser({ status, settings: state, cw }: Pick<PageProps, 'status' | 
   }
   return (
     <>
-      <Group title={cw.about.gpu} place={7}>
+      <Group title={cw.about.gpu} place={6}>
         <Row
           title={w.gpuAuto}
           detail={w.gpuAutoDetail}

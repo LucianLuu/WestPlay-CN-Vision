@@ -48,6 +48,7 @@ mod typing;
 mod weather;
 mod webapp;
 mod webview;
+pub mod window_corner;
 mod worker;
 mod youtube;
 mod youtube_music;
@@ -2670,6 +2671,157 @@ pub fn in_front(window: isize) -> bool {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     // SAFETY: a plain question, with nothing passed.
     unsafe { GetForegroundWindow() }.0 as isize == window
+}
+
+/// The `msedgewebview2.exe` processes this one started, at any depth: the pages WebView2 is running
+/// for it, by pid. A page that dies (a crash, or STATUS_BREAKPOINT) leaves its process gone; the next
+/// one is the page loading again.
+///
+/// Any depth, because WebView2's tree is a browser process of ours, then the page's renderer under it:
+/// the renderer is what a crash takes, and its parent is the browser process, not this one.
+
+/// The WebView2 **browser** processes run under this app (not the renderers).
+///
+/// `page_processes` collects every `msedgewebview2.exe` in the tree — the cab's page, the
+/// companion window, and every player's hidden page (Spotify, YouTube, Apple Music, QQ Music).
+/// Renderers come and go all the time: a hidden player's page is closed, a background page is
+/// reclaimed. Watching those made `watch_companion` reload the companion window whenever a
+/// *player* closed (`owner 2026-11-23`: "the main window keeps refreshing"), because one of the
+/// ids it had seen was no longer there.
+///
+/// This one keeps only the browser processes — the `msedgewebview2.exe` that is not a
+/// `--type=renderer`/`--type=gpu-process`/… child. A browser process going is a real crash.
+pub fn page_host_processes() -> Vec<u32> {
+    use std::collections::{HashMap, HashSet};
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+    };
+
+    let mut pairs: Vec<(u32, u32, String)> = Vec::new();
+    // SAFETY: a snapshot of the process list, walked with the API's own struct; both are closed
+    // before returning, and no pointer outlives the call that filled it.
+    unsafe {
+        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return Vec::new();
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                let name = String::from_utf16_lossy(
+                    &entry.szExeFile[..entry.szExeFile.iter().position(|c| *c == 0).unwrap_or(0)],
+                );
+                pairs.push((entry.th32ProcessID, entry.th32ParentProcessID, name));
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
+    }
+
+    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut names: HashMap<u32, String> = HashMap::new();
+    for (pid, parent, name) in pairs {
+        children.entry(parent).or_default().push(pid);
+        names.insert(pid, name);
+    }
+
+    // Walk down from this process, keeping the WebView2 browsers.
+    let mut browsers: HashMap<u32, u32> = HashMap::new(); // browser pid -> parent pid
+    let mut seen: HashSet<u32> = HashSet::new();
+    let mut queue = vec![std::process::id()];
+    while let Some(pid) = queue.pop() {
+        for &child in children.get(&pid).into_iter().flatten() {
+            if !seen.insert(child) {
+                continue;
+            }
+            queue.push(child);
+            let is_webview = names
+                .get(&child)
+                .is_some_and(|name| name.eq_ignore_ascii_case("msedgewebview2.exe"));
+            if is_webview {
+                browsers.insert(child, pid);
+            }
+        }
+    }
+
+    // A WebView2 browser process has another msedgewebview2.exe under it (its renderers);
+    // the renderers and GPU processes themselves have none. Keeping the ones that *have*
+    // WebView2 children leaves the browser process of each WebView.
+    let mut hosts: Vec<u32> = browsers
+        .iter()
+        .filter(|(pid, _)| children.get(pid).is_some_and(|kids| {
+            kids.iter().any(|kid| {
+                names
+                    .get(kid)
+                    .is_some_and(|name| name.eq_ignore_ascii_case("msedgewebview2.exe"))
+            })
+        }))
+        .map(|(pid, _)| *pid)
+        .collect();
+    hosts.sort_unstable();
+    hosts
+}
+
+pub fn page_processes() -> Vec<u32> {
+    use std::collections::{HashMap, HashSet};
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+    };
+
+    let mut pairs: Vec<(u32, u32, String)> = Vec::new();
+    // SAFETY: a snapshot of the process list, walked with the API's own struct; both are locals.
+    unsafe {
+        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return Vec::new();
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                let name = String::from_utf16_lossy(
+                    &entry.szExeFile[..entry.szExeFile.iter().position(|c| *c == 0).unwrap_or(0)],
+                );
+                pairs.push((entry.th32ProcessID, entry.th32ParentProcessID, name));
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
+    }
+
+    // Walk down from this process: everything reachable is ours, whatever starts it.
+    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut names: HashMap<u32, String> = HashMap::new();
+    for (pid, parent, name) in pairs {
+        children.entry(parent).or_default().push(pid);
+        names.insert(pid, name);
+    }
+    let mut found = Vec::new();
+    let mut seen: HashSet<u32> = HashSet::new();
+    let mut queue = vec![std::process::id()];
+    while let Some(pid) = queue.pop() {
+        for &child in children.get(&pid).into_iter().flatten() {
+            if !seen.insert(child) {
+                continue;
+            }
+            queue.push(child);
+            if names
+                .get(&child)
+                .is_some_and(|name| name.eq_ignore_ascii_case("msedgewebview2.exe"))
+            {
+                found.push(child);
+            }
+        }
+    }
+    found.sort_unstable();
+    found
 }
 
 /// Whether the process `game` (its pid; 0: no game) has a window showing: shown, not minimised, not cloaked

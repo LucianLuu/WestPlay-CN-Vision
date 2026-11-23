@@ -5,10 +5,6 @@ import { followRound } from './mapRound'
 
 /** Emitted by the Tauri backend about once per second (mirrors `westplay_host::Status`). */
 export interface HostStatus {
-  mobileWebUi?:
-    | { state: 'off' }
-    | { state: 'running'; pairingUrl: string | null }
-    | { state: 'error'; message: string }
   webviewVersion: string
   adapter: string | null
   /** The graphics card WestPlay's screen is drawn on, and the game's (`null` until the game runs). */
@@ -24,12 +20,11 @@ export interface HostStatus {
   screenDrawing: boolean
   /** Whether the truck the player is in is one WestPlay shows in, as the plugin last saw (`null`: not known yet). */
   truckSupported: boolean | null
-  /** The coach's passengers' speakers (`null`: a truck, or not read yet). */
+  /** The coach the player drives: how many speakers its passengers' set plays through (`null`: a truck, no game,
+   * or the coach's parts not read yet). */
   coachSpeakers: number | null
-  /** Whether the game runs with higher privileges than WestPlay. */
+  /** Whether the game runs as administrator: WestPlay can't read its route, guidance or weather then. */
   gameElevated: boolean
-  /** The game's own WestPlay plugin is another build's (`crates/host/src/lib.rs`, `keep_plugins_up_to_date`). */
-  pluginOutdated: boolean
   /** Whether WestPlay is open on the truck's screen (otherwise the truck's original screen shows), as the
    * cabin page last said; `null` until it has. */
   westplayOpen: boolean | null
@@ -43,9 +38,6 @@ export interface HostStatus {
   /** The same of Apple Music: signed in or not (`null`: not known yet), and Apple's sign-in window open. */
   appleMusicSignedIn: boolean | null
   appleMusicSigningIn: boolean
-  /** The sites the apps show (Bilibili, NetEase Cloud Music, QQ Music): whether each is signed in (`null`: not
-   * asked of it this run), and whether its sign-in window is open (mirrors `westplay_host::weblogin::Logins`). */
-  webLogins: Record<WebService, { signedIn: boolean | null; signingIn: boolean }>
   /** The map of the profile played (mirrors `westplay_host::maps::MapStatus`). */
   map: MapStatus
   /** The map the cab shows: its folder in WestPlay's maps, and when it was built (seconds since 1970;
@@ -97,7 +89,8 @@ export type MapStatus =
   | { state: 'ready' }
   /** How far, 0 to 1. */
   | { state: 'building'; done: number; stage: MapStage }
-  /** To build once the game is closed. */
+  /** To build once the game is closed; `stopped`: its preparation was under way when the game started, and was
+   * stopped. */
   | { state: 'waitingForGame'; stopped?: boolean }
   /** To build once the PC has `needed` bytes of memory free (it has `free` now). */
   | { state: 'waitingForMemory'; needed: number; free: number }
@@ -159,30 +152,13 @@ export function appleMusicSignOut(): Promise<void> {
   return call('apple_music_sign_out')
 }
 
-/** The sites the apps show, as the companion names them. */
-export type WebService = 'bilibili' | 'netease' | 'qqMusic'
-
-/** The command each site's sign-in and sign-out are (`app/src/main.rs`; `weblogin.rs` for what they open). */
-const WEB_COMMANDS: Record<WebService, string> = { bilibili: 'bilibili', netease: 'netease', qqMusic: 'qq_music' }
-
-/** Opens the site's sign-in in a window on the desktop, on the WebView2 profile the app in the cab shows it on
- * (the status then says when it's done). */
-export function webSignIn(service: WebService): Promise<void> {
-  return call(`${WEB_COMMANDS[service]}_sign_in`)
-}
-
-/** Signs the site out, on its own page for it (the window says when it's done: close it then). */
-export function webSignOut(service: WebService): Promise<void> {
-  return call(`${WEB_COMMANDS[service]}_sign_out`)
-}
-
 /** Opens the support page (Kreosus) in the player's browser. */
 export function openSupportPage(): Promise<void> {
   return call('open_support_page')
 }
 
 /** WestPlay's pages elsewhere, at the foot of the list. */
-export type Social = 'youtube' | 'discord' | 'patreon' | 'afdian'
+export type Social = 'youtube' | 'discord' | 'patreon'
 
 /** Opens one of WestPlay's pages elsewhere in the player's browser (the app holds their addresses). */
 export function openSocial(site: Social): Promise<void> {

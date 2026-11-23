@@ -176,12 +176,6 @@ export const words: Words = {
     finishInWindow: 'Finish signing in in the Apple Music window',
     signingIn: { title: 'Signing in to Apple Music', text: 'Continue in the Apple Music window' },
   },
-  webAccounts: {
-    title: 'Sign in to {name}',
-    sub: 'Optional. Signed in, the truck’s screen is your own account on the site: what you saved, follow, listen to and watched. You sign in in a window of its own, and WestPlay never sees your account.',
-    finishInWindow: 'Finish signing in in the window',
-    signingIn: { title: 'Signing in to {name}', text: 'Continue in the window' },
-  },
   launch: {
     title: 'You’re all set',
     done: 'Done',

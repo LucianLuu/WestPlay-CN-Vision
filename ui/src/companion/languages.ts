@@ -69,11 +69,7 @@ const TAGS: Record<string, string> = {
 
 /** The game's languages, by their own names in alphabetical order (Latin letters first). */
 export function gameLanguages(): string[] {
-  // Only the languages WestPlay has words for: this build ships English, Simplified and Traditional
-  // Chinese (owner 2026-11-18: it's for Chinese players, and the other 40 word tables were most of the
-  // page's weight). A game in another language reads English (`strings/index.ts`'s `languageOf`), and its
-  // own name still shows beside "Automatic" (`OWN_NAMES` knows them all).
-  return ['en_us', 'zh_cn', 'zh_tw']
+  return Object.keys(OWN_NAMES).sort((a, b) => OWN_NAMES[a].localeCompare(OWN_NAMES[b], 'en'))
 }
 
 /** A language's own name (`de_de`: Deutsch); the code itself for one the game doesn't have. */

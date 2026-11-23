@@ -55,3 +55,19 @@ dist/
 # WestPlay CN Vision: the layer's own compiled sources are built, not committed
 *.pyc
 __pycache__/
+# 3.0 的界面源码与构建产物：原作者不再公开，这些不进仓库（owner 2026-11-23）
+/ui/src/cabin/shell/glass-30.css
+/ui/src/companion/motion.css
+/ui/src/companion/titlebar.css
+/ui/src/companion/WindowControls.tsx
+/ui/src/cn-standalone.tsx
+/ui/vite.cn-standalone.config.ts
+
+# 3.0 的移植笔记：记着构建方法和产物哈希，不进仓库
+/docs/移植3.0-未解决的难题.md
+/docs/移植3.0-难题解决方案.md
+
+# 本地备份
+*.bak-*
+*-backup/
+/dist-ours-backup/
