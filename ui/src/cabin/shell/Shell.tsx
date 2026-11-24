@@ -12,6 +12,7 @@ import { useYouTube } from '../apps/youtube/youtube'
 import { useWebApp } from '../apps/web/webapp'
 import { useYouTubeMusic } from '../apps/youtubeMusic/youtubeMusic'
 import { Keyboard } from '../keyboard/Keyboard'
+import { InputMethod } from '../keyboard/InputMethod'
 import { useCabin, useLive } from '../state/store'
 import { Sidebar } from './Sidebar'
 import { startLiquidGlass } from './liquidGlass'
@@ -162,6 +163,7 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
           {children}
           <Player />
           <Keyboard />
+          <InputMethod />
           <VolumeHud />
           <div ref={corners} className="screen-corners" aria-hidden />
         </div>

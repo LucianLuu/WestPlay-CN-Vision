@@ -26,6 +26,10 @@
   --key: #48484a;
   --key-fn: #2c2c2e;
   --field: #2c2c2e;
+  /* The input method's bar (keyboard.css): solid as the keyboard under it, its pills and chip as clear. */
+  --ime-glass: #1c1c1e;
+  --ime-pill: #3a3a3c;
+  --ime-chip: #fff;
 }
 
 :root.reduce-transparency .shell.appearance-light,
@@ -41,6 +45,9 @@
   --key: #fff;
   --key-fn: #aeb3be;
   --field: #fff;
+  --ime-glass: #e9ebf0;
+  --ime-pill: #fff;
+  --ime-chip: #fff;
 }
 
 /* The sidebar over a video (youtube.css): already almost solid, now wholly. */

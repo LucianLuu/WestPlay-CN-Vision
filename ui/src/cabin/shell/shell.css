@@ -551,6 +551,7 @@ body,
   .sidebar,
   .screen-slot,
   .keyboard,
+  .keyboard-ime,
   .screen-corners {
     --panel-radius: var(--sidebar-radius);
     /* 96 units at a Text Size of 1, its clock (26 units) 68 of them. */

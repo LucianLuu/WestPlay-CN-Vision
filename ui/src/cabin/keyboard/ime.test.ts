@@ -88,8 +88,8 @@ describe("the cabin's own Chinese input method", () => {
     expect(useKeyboard.getState().composing).toBe('')
   })
 
-  it('pages through what one syllable offers, eight to a page', async () => {
-    // Fourteen characters for one syllable: more than the bar holds, so a second page of six.
+  it('pages through what one syllable offers, nine to a page', async () => {
+    // Fourteen characters for one syllable: more than the bar holds, so a second page of five.
     const long: Table = { chars: { a: '一二三四五六七八九十甲乙丙丁' }, words: {} }
     const { useKeyboard, settled } = await keyboard({ table: long })
     const field = cabinField()
@@ -98,22 +98,17 @@ describe("the cabin's own Chinese input method", () => {
     await settled()
     expect(useKeyboard.getState().page).toBe(0)
 
-    // The eighth of the first page.
-    useKeyboard.getState().press(char('8'))
-    expect(field.text.value).toBe('八')
+    // The ninth of the first page: every digit the keyboard has picks one (1 to 9).
+    useKeyboard.getState().press(char('9'))
+    expect(field.text.value).toBe('九')
     expect(useKeyboard.getState().composing).toBe('')
 
-    // 9 has nothing to pick on a page of eight: it neither takes the next page's first (九) nor types a 9.
+    // On to the second page: the first candidate there is the tenth character, and the digits pick from it.
     useKeyboard.getState().press(char('a'))
-    useKeyboard.getState().press(char('9'))
-    expect(field.text.value).toBe('八')
-    expect(useKeyboard.getState().composing).toBe('a')
-
-    // On to the second page: the first candidate there is the ninth character, and the digits pick from it.
     useKeyboard.getState().turnPage(1)
     expect(useKeyboard.getState().page).toBe(1)
     useKeyboard.getState().press(char('1'))
-    expect(field.text.value).toBe('八九')
+    expect(field.text.value).toBe('九十')
 
     // Round the ends: on past the last page comes back to the first, back past the first to the last. (A fresh
     // composition: the pick above took the whole syllable.)
@@ -124,10 +119,10 @@ describe("the cabin's own Chinese input method", () => {
     useKeyboard.getState().turnPage(1)
     expect(useKeyboard.getState().page).toBe(0)
 
-    // The digit picks from the page shown: 5 on the second page is 丙 (八 a page, so 九 十 甲 乙 丙 丁).
+    // The digit picks from the page shown: 5 on the second page is 丁 (九 a page, so 十 甲 乙 丙 丁).
     useKeyboard.getState().turnPage(1)
     useKeyboard.getState().press(char('5'))
-    expect(field.text.value).toBe('八九丙')
+    expect(field.text.value).toBe('九十丁')
     // Nothing is left to compose: one syllable took all of it.
     expect(useKeyboard.getState().composing).toBe('')
   })

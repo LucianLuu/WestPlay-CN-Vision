@@ -9,6 +9,18 @@
   --key-bubble: #5c606a;
   --field: rgb(255 255 255 / 0.1);
   --system-blue: #0a84ff;
+  /* The Chinese input method's bar above the keys (its own block below): a glass strip of its own, the pinyin
+     in a pill on it, the candidate the space bar takes lit as a white chip. */
+  --ime-glass: rgb(32 35 42 / 0.72);
+  --ime-pill: rgb(255 255 255 / 0.13);
+  --ime-chip: rgb(255 255 255 / 0.94);
+  --ime-ink: #f4f6fa;
+  --ime-chip-ink: #101318;
+  --ime-digit: rgb(255 255 255 / 0.5);
+  --ime-chip-digit: rgb(16 19 24 / 0.5);
+  --ime-ring: rgb(255 255 255 / 0.1);
+  --ime-rule: rgb(255 255 255 / 0.12);
+  --ime-chip-ring: rgb(0 0 0 / 0.1);
 }
 
 .shell.appearance-light {
@@ -18,6 +30,16 @@
   --key-bubble: #fff;
   --field: rgb(20 22 26 / 0.07);
   --system-blue: #007aff;
+  --ime-glass: rgb(247 248 251 / 0.86);
+  --ime-pill: rgb(255 255 255 / 0.72);
+  --ime-chip: #fff;
+  --ime-ink: #14161a;
+  --ime-chip-ink: #0d1014;
+  --ime-digit: rgb(20 22 26 / 0.45);
+  --ime-chip-digit: rgb(13 16 20 / 0.5);
+  --ime-ring: rgb(0 0 0 / 0.06);
+  --ime-rule: rgb(20 22 26 / 0.1);
+  --ime-chip-ring: rgb(0 0 0 / 0.12);
 }
 
 /* Its corners follow the panel's round it (owner 2026-11-07, "rounded corner consistency"): each corner the one
@@ -353,6 +375,167 @@
   }
 }
 
+/* The Chinese input method's bar (`InputMethod.tsx`), hanging over the screen above the keyboard's panel as a
+   phone's does: the pinyin being composed in a pill at its left end, the candidates beside it, each numbered
+   with the digit that picks it (the first taken by the space bar, lit as a white chip, as the bar of the phone
+   this follows shows), and the two paging keys at its right end. Its place is the keyboard's top edge
+   (shell.css's variables), and it sits beside the keyboard rather than inside it: the keyboard's glass filters
+   its whole subtree, clipping anything that hangs outside its own box. */
+.keyboard-ime {
+  position: absolute;
+  /* Right of the sidebar, inside the app area's margins: the keyboard's own (keyboard.css's .keyboard). */
+  left: calc(var(--content-left, 170px) + var(--keyboard-margin));
+  right: calc(var(--edge) + var(--keyboard-margin));
+  bottom: calc(var(--keyboard-bottom) + var(--keyboard-height) + 10px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 62px;
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--ime-glass);
+  backdrop-filter: blur(26px) saturate(1.6);
+  box-shadow:
+    0 10px 28px rgb(0 0 0 / 0.18),
+    0 0 0 1px var(--ime-ring);
+  color: var(--ime-ink);
+  font: inherit;
+  animation: keyboard-ime-in 200ms var(--motion-ease) both;
+}
+
+@keyframes keyboard-ime-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* What is being composed, its syllables apart ("ni hao"): quieter than the candidates, and never so wide that
+   it pushes them off the bar. */
+.keyboard-ime-pinyin {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 36%;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-inline: 14px;
+  border-radius: 11px;
+  background: var(--ime-pill);
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.keyboard-ime-candidates {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* One candidate: the digit that picks it small at its top-left, the character beside it — the cell's content
+   centred both ways, its digits riding high as a phone's bar sets them. The cells share the bar's room between
+   the pill and the paging keys evenly (a page's nine fit any screen), each no wider than a comfortable key. */
+.keyboard-ime-candidate {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 84px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 6px 0 4px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The first: what the space bar takes, as a phone's bar lights it. */
+.keyboard-ime-candidate.first {
+  background: var(--ime-chip);
+  color: var(--ime-chip-ink);
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.16),
+    0 0 0 1px var(--ime-chip-ring);
+}
+
+.keyboard-ime-digit {
+  flex: none;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--ime-digit);
+  /* High in its cell, beside the character's top rather than its middle. */
+  transform: translateY(-7px);
+}
+
+.keyboard-ime-candidate.first .keyboard-ime-digit {
+  color: var(--ime-chip-digit);
+}
+
+.keyboard-ime-word {
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* The two paging keys at its right end, behind a rule: chevrons, back and on, that take the bar a page of
+   candidates round the ends. Dimmed rather than gone while there is only one page to show. */
+.keyboard-ime-pages {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 7px;
+  border-left: 1px solid var(--ime-rule);
+}
+
+.keyboard-ime-page {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: var(--ime-pill);
+  color: var(--ime-ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.keyboard-ime-page svg {
+  width: 21px;
+  height: 21px;
+}
+
+.keyboard-ime-page:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keyboard-ime {
+    animation: none;
+  }
+}
+
+
 /* A short screen (shell.css): the keyboard about two thirds as tall, so it leaves room for what's typed into. Its
    corners the sidebar's as every panel's (owner 2026-11-03): a wide padding round smaller keys set close together
    (owner: the keys filling it to its edges "looks awful"), at the same height. */
@@ -372,4 +555,43 @@
   .keyboard .key.fn {
     font-size: 16px;
   }
+
+  /* The input method's bar with it: a shorter strip, its candidate cells narrower, so nine of them still fit
+     over keys two thirds the size. Its place is the keyboard's (shell.css's short screen's variables, which the
+     bar takes as the keyboard does). */
+  .keyboard-ime {
+    height: 50px;
+    gap: 8px;
+  }
+
+  .keyboard-ime-pinyin {
+    padding-inline: 11px;
+    font-size: 19px;
+  }
+
+  .keyboard-ime-candidate {
+    max-width: 62px;
+    padding: 0 5px 0 3px;
+    gap: 2px;
+  }
+
+  .keyboard-ime-digit {
+    font-size: 12px;
+    transform: translateY(-6px);
+  }
+
+  .keyboard-ime-word {
+    font-size: 21px;
+  }
+
+  .keyboard-ime-page {
+    width: 34px;
+    height: 34px;
+  }
+
+  .keyboard-ime-page svg {
+    width: 17px;
+    height: 17px;
+  }
 }
+

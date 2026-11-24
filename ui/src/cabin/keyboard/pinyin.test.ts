@@ -123,7 +123,7 @@ describe('the keys the composition takes', () => {
   })
 
   it('maps a digit key to the candidate position it names', () => {
-    // 1 to 9 name positions 0 to 8; the store only takes the ones the page actually holds (eight).
+    // 1 to 9 name positions 0 to 8; a page holds nine, so each of them picks one there.
     expect(digitChoice('1')).toBe(0)
     expect(digitChoice('8')).toBe(7)
     expect(digitChoice('9')).toBe(8)

@@ -87,7 +87,10 @@ export const useKeyboard = create<KeyboardStore>()((set, get) => {
 
   const tellHost = () => {
     const { field, keys } = get()
-    const ime = keys.language === 'zh' && field?.playerTypes === false
+    // 车机自己的输入框（Apple Music、网易云、QQ、电台、车辆…）不带 `playerTypes`，
+    // 那是「玩家的键盘自己往里打」才有的标记；只有它明确是 `true` 时才不用输入法。
+    // 只认 `=== false` 的话，中文输入法在这些框里永远不会出现（owner 2026-11-23）。
+    const ime = keys.language === 'zh' && field != null && field.playerTypes !== true
     if (ime !== toldHost) {
       toldHost = ime
       // Nothing to tell outside the host (a browser preview, the demo, a test).
@@ -183,7 +186,7 @@ export const useKeyboard = create<KeyboardStore>()((set, get) => {
         const digit = digitChoice(char)
         if (digit !== null && get().composing) {
           // The digit picks from the page the bar is showing: 1 is the first candidate on it. A page holds
-          // eight, so 9 has nothing to pick — it neither takes the next page's first nor types a 9.
+          // nine, so the last digit is the ninth candidate's, never the next page's first.
           if (digit < CANDIDATES_PER_PAGE) choose(get().page * CANDIDATES_PER_PAGE + digit)
           return true
         }

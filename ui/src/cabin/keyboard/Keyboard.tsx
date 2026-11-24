@@ -1,10 +1,9 @@
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { useLive } from '../state/store'
 import { useText } from '../state/text'
-import { DeleteGlyph, HideGlyph, KeysGlyph, PageGlyph, ShiftGlyph } from './glyphs'
+import { DeleteGlyph, HideGlyph, KeysGlyph, ShiftGlyph } from './glyphs'
 import { capital, KEYBOARD_LANGUAGES, type Key, keyRows, type Language, type ReturnKind } from './layouts'
 import { useCover } from '../apps/safari/hole'
-import { CANDIDATES_PER_PAGE, candidatesFor, syllablesShown } from './pinyin'
 import { useKeyboard } from './store'
 import './keyboard.css'
 
@@ -26,14 +25,7 @@ export function Keyboard() {
   const keys = useKeyboard((state) => state.keys)
   const physical = useKeyboard((state) => state.physical)
   const flash = useKeyboard((state) => state.flash)
-  // The cabin's own Chinese input method: what is being composed, and what it offers (pinyin.ts).
-  const composing = useKeyboard((state) => state.composing)
-  const table = useKeyboard((state) => state.table)
-  const page = useKeyboard((state) => state.page)
-  // The page's slice of what the composition offers, and how many pages there are (the paging keys' own end).
-  const offered = composing && table ? candidatesFor(composing, table) : []
-  const pages = Math.max(1, Math.ceil(offered.length / CANDIDATES_PER_PAGE))
-  const candidates = offered.slice(page * CANDIDATES_PER_PAGE, (page + 1) * CANDIDATES_PER_PAGE)
+  // The cabin's own Chinese input method's bar is its own (`InputMethod.tsx`, set beside this keyboard).
   const moving = useLive((state) => (state.telemetry ? Math.abs(state.telemetry.speed) * 3.6 > 1 : false))
   const text = useText()
   // The return key keeps its name while the keyboard goes away.
@@ -108,57 +100,6 @@ export function Keyboard() {
         <div className={physical === 'typing' ? 'keyboard-chip typing' : 'keyboard-chip'} role="status">
           <KeysGlyph />
           {chip}
-        </div>
-      )}
-      {composing && (
-        // What the Chinese input method has composed, and its candidates: tapped with the cursor, or picked
-        // by the digits 1 to 8 (the first by the space bar). A syllable has more candidates than the bar holds,
-        // so the two keys at its right end page through them (round the ends).
-        <div className="keyboard-ime" role="group" aria-label={text.keyboard.ime}>
-          <span className="keyboard-ime-pinyin">{table ? syllablesShown(composing, table) : composing}</span>
-          {candidates.length > 0 && (
-            <div className="keyboard-ime-candidates">
-              {candidates.map((candidate, index) => (
-                <button
-                  key={`${index}:${candidate}`}
-                  type="button"
-                  tabIndex={-1}
-                  className={index === 0 ? 'keyboard-ime-candidate first' : 'keyboard-ime-candidate'}
-                  onPointerUp={() => useKeyboard.getState().choose(page * CANDIDATES_PER_PAGE + index)}
-                >
-                  <span className="keyboard-ime-digit" aria-hidden>
-                    {index + 1}
-                  </span>
-                  <span className="keyboard-ime-word">{candidate}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="keyboard-ime-pages">
-            <button
-              type="button"
-              tabIndex={-1}
-              className="keyboard-ime-page"
-              aria-label={text.keyboard.imeBack}
-              disabled={pages <= 1}
-              onPointerUp={() => useKeyboard.getState().turnPage(-1)}
-            >
-              <PageGlyph back />
-            </button>
-            <button
-              type="button"
-              tabIndex={-1}
-              className="keyboard-ime-page"
-              aria-label={text.keyboard.imeOn}
-              disabled={pages <= 1}
-              onPointerUp={() => useKeyboard.getState().turnPage(1)}
-            >
-              <PageGlyph />
-            </button>
-            {/* Two keys, not three: the put-away key that used to sit here (§27.5) took the width the ninth
-                candidate needed, so the eighth was half under it. The bottom row's own hide key still puts the
-                keyboard away. */}
-          </div>
         </div>
       )}
       {rows.map((row, r) => (

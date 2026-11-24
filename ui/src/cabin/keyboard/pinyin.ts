@@ -22,9 +22,10 @@ export interface Table {
 /** Where the table is served from (`ui/public/chinese/pinyin.json`). */
 export const TABLE_URL = '/chinese/pinyin.json'
 
-/** How many candidates the bar shows at once: what the digits 1 to 8 pick from, a page at a time. The two
- * paging keys beside them take the rest (`Keyboard.tsx`), so every candidate a syllable has is reachable. */
-export const CANDIDATES_PER_PAGE = 8
+/** How many candidates the bar shows at once: nine, what the digits 1 to 9 pick from, a page at a time (the
+ * digits the keyboard has; a phone's bar numbers them the same). The two paging keys at the bar's right end
+ * take the rest (`Keyboard.tsx`), so every candidate a syllable has is reachable. */
+export const CANDIDATES_PER_PAGE = 9
 
 /** The most letters composed at once (a long word's pinyin; past it the composition stops taking more). */
 export const MOST_COMPOSED = 32
