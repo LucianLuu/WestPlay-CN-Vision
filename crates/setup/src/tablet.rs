@@ -1243,7 +1243,14 @@ mod tests {
         );
         // Built with them: the game's and the mods', each once; read back from the mod's file.
         let files = GameFiles::new(vec![Mount::Folder(game)]);
-        let (bytes, built) = crate::game_mod::build(&files, &mod_trucks, &crate::cab_mark::Marks::default()).unwrap();
+        let (bytes, built) = crate::game_mod::build(
+            &files,
+            &mod_trucks,
+            &crate::cab_mark::Marks::default(),
+            crate::game::Kind::Ets2,
+            None,
+        )
+        .unwrap();
         assert!(built.patched.contains(&westplay_shared::TABLET));
         let built_at = root.join("westplay.scs");
         std::fs::write(&built_at, bytes).unwrap();

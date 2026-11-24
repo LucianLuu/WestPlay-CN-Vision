@@ -28,6 +28,10 @@ interface YouTubeStore {
   stateAt: number
   /** The video opened last (shown before YouTube's player has it, and after). */
   current: YouTubeVideo | null
+  /** Which site `current` is from: YouTube's, or Bilibili's over the same shell (`setSite`). What draws a
+   * video outside the app (the Dashboard's Now Playing) tells them apart by it: Bilibili's gets its cover and
+   * title on a card, YouTube's is cut open for its picture. */
+  videoSite: 'youtube' | 'bilibili'
   /** The player is open, full screen. */
   open: boolean
   /** The player was left open (the player went elsewhere, it didn't close it): YouTube opens on it again. */
@@ -36,6 +40,16 @@ interface YouTubeStore {
   holdSidebar: boolean
   /** The pages open over Home, the one showing last. */
   views: View[]
+  /** Bilibili's own section showing (its rail's): its front page, its ranking, its series. YouTube has none
+   * (`home` kept for it). */
+  section: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'live'
+  /** Bilibili's own dark page (its rail's moon): the app's surface only, the truck's appearance untouched. */
+  dark: boolean
+  /** Which of Bilibili's own pages beside its rail shows: the player's own (their avatar), their messages, or
+   * their 动态. `null`: the section's list (`section`). YouTube has none. */
+  page: 'profile' | 'messages' | 'dynamics' | null
+  /** Which part of a series is playing (its 选集's own number), 1 for a video with none. */
+  part: number
   /** The current video's Up next (`null` until YouTube has answered). */
   upNext: YouTubeVideo[] | null
   /** The playlist playing, in its order (Next and autoplay go through it, in place of Up next). */
@@ -113,10 +127,16 @@ export const useYouTube = create<YouTubeStore>()(
       state: null,
       stateAt: 0,
       current: null,
+      videoSite: 'youtube',
       open: false,
       returnToPlayer: false,
       holdSidebar: false,
       views: [],
+      section: 'home',
+      // Its own page starts dark (its client's night), the owner's ask (2026-11-22).
+      dark: true,
+      page: null,
+      part: 1,
       upNext: null,
       queue: null,
       captions: null,
@@ -169,10 +189,24 @@ export const useYouTube = create<YouTubeStore>()(
   ),
 )
 
-/** Tells YouTube's player, or YouTube, what to do. */
+/** Which site this one app draws now (YouTube's own, or Bilibili's over the same shell). Bilibili's own page
+ * answers YouTube's shapes; `setSite` switches it as the app opens on one or the other. */
+let site: 'youtube' | 'bilibili' = 'youtube'
+
+/** The site this app's commands go to from now on. */
+export function setSite(which: 'youtube' | 'bilibili'): void {
+  site = which
+}
+
+/** The site this app's commands go to now. */
+export function currentSite(): 'youtube' | 'bilibili' {
+  return site
+}
+
+/** Tells YouTube's player, or YouTube, what to do (or Bilibili's, when that's the site it shows). */
 export function command(command: YouTubeCommand): void {
   if (command.action === 'show') shows++
-  postToHost({ type: 'youtube', command })
+  postToHost({ type: site, command } as never)
 }
 
 /** How many times the picture has been placed (`show`), to tell whether it was placed again since. */
@@ -188,10 +222,18 @@ export type Question =
   | { action: 'search'; query: string; more?: string; filter?: 'channels' | 'playlists' }
   | { action: 'suggest'; query: string }
   | { action: 'related'; video: string }
-  | { action: 'feed'; which: 'home' | 'subscriptions'; more?: string }
+  | { action: 'feed'; which: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'subscriptions' | 'live'; more?: string }
   | { action: 'channel'; channel: string; more?: string }
   | { action: 'subscribe'; channel: string; on: boolean }
   | { action: 'playlist'; playlist: string; more?: string }
+  | { action: 'detail'; video: string }
+  | { action: 'profile' }
+  | { action: 'dynamics'; video?: boolean; more?: string }
+  | { action: 'messages'; kind: 'chat' | 'reply' | 'at' | 'like' }
+  | { action: 'library'; kind: 'history' | 'later' | 'favorites'; more?: string }
+  | { action: 'comments'; video: string; sort?: 'hot' | 'new'; more?: string }
+  | { action: 'danmaku'; video: string; part?: number }
+  | { action: 'sendDanmaku'; video: string; text: string; at: number; part?: number }
 
 /** What a search shows: everything, or (YouTube's filters) channels or playlists only. */
 export type SearchFilter = 'all' | 'channels' | 'playlists'
@@ -225,6 +267,22 @@ export function openPlaylist(playlist: KnownPlaylist): void {
 /** A channel's page, over what's open. */
 export function openChannel(channel: View & { kind: 'channel' } extends { channel: infer C } ? C : never): void {
   useYouTube.setState((store) => ({ views: [...store.views, { kind: 'channel', channel, id: ++views }] }))
+}
+
+/** Bilibili's rail: which of its sections shows (its pages closed, so the section's own list is it). */
+export function setSection(section: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'live'): void {
+  useYouTube.setState({ section, views: [], page: null })
+}
+
+/** Bilibili's own dark page, or the light one (`dark`), for this app alone. */
+export function setDark(dark: boolean): void {
+  useYouTube.setState({ dark })
+}
+
+/** Bilibili's own page beside its rail: the player's own (their videos), their messages, their 动态, or
+ * (`null`) the section's list again. */
+export function setPage(page: 'profile' | 'messages' | 'dynamics' | null): void {
+  useYouTube.setState({ page, views: [] })
 }
 
 /** Back from the page on top. */
@@ -296,12 +354,16 @@ function restore(state: YouTubeState): void {
       title: state.title,
       channel: state.author,
       avatar: null,
-      thumbnail: `https://i.ytimg.com/vi/${video}/hqdefault.jpg`,
+      // YouTube's own picture by its id; Bilibili's videos aren't on YouTube's CDN (its cover comes with the
+      // video when it's opened, and a restored one has none until then).
+      thumbnail: site === 'youtube' ? `https://i.ytimg.com/vi/${video}/hqdefault.jpg` : null,
       duration: '',
       views: '',
       age: '',
       live: state.live,
     },
+    // Whose video it is (the Dashboard draws Bilibili's as a card).
+    videoSite: site,
     upNext: null,
   })
   fetchUpNext(video)
@@ -360,7 +422,11 @@ export function play(video: YouTubeVideo, fullScreen = true, queue?: Queue): voi
   const before = useYouTube.getState().watched.find((w) => w.video.video === video.video)
   useYouTube.setState((store) => ({
     current: video,
+    // Whose video it is, taken now and not read off `site` later: the app closing puts `site` back to YouTube's
+    // while this video still plays (the Dashboard's card has to stay Bilibili's).
+    videoSite: site,
     open: fullScreen || store.open,
+    part: 1,
     upNext: null,
     queue: queue ?? (store.queue?.videos.some((v) => v.video === video.video) ? store.queue : null),
     watched: [
@@ -380,6 +446,13 @@ export function play(video: YouTubeVideo, fullScreen = true, queue?: Queue): voi
   command(resume ? { action: 'load', video: video.video, start: before.time } : { action: 'load', video: video.video })
   if (useYouTube.getState().queue) extendQueue()
   else fetchUpNext(video.video)
+}
+
+/** Plays another part of the video playing (a series' own 选集: `part` numbered from one). The page moves to
+ * that part (`?p=`), so the video reported stays the same; `part` is kept for what's asked of it (danmaku). */
+export function playPart(video: YouTubeVideo, part: number): void {
+  useYouTube.setState({ part })
+  command({ action: 'load', video: video.video, part })
 }
 
 /** The playlist's next videos, asked for as it nears the end of those it has. */

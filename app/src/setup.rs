@@ -295,11 +295,11 @@ pub async fn check_game(dir: PathBuf, store: State<'_, SetupStore>) -> Result<Ga
             })
             .collect();
         let files = GameFiles::install(&game.dir).map_err(|e| e.to_string())?;
-        // Which layouts this game can have, asked of the reader alone: building the mod here to find out
-        // made the page's process die on a game with 119 mods (its 18 textures are 63 MB, WebView2's
-        // STATUS_BREAKPOINT every time, 2026-11-22). A game that can't be built says why at Install.
-        let patched = game_mod::patched_only(&files);
-        let mod_problem: Option<String> = None;
+        let (patched, mod_problem) =
+            match game_mod::build(&files, &[], &cab_mark::Marks::default(), game.kind, game.workshop().as_deref()) {
+                Ok((_, built)) => (built.patched, None),
+                Err(problem) => (Vec::new(), Some(problem.to_string())),
+            };
         let trucks = trucks::fit(game.kind, &files, &patched, &all_profiles, &installed)
             .into_iter()
             .map(|(truck, fit)| TruckCheck {
@@ -354,7 +354,29 @@ fn build_mod(game: &Game) -> Result<(Vec<u8>, game_mod::Built, Vec<u64>), String
     log!("setup: the mod: the trucks' dashboard scripts ({} of the mods' trucks' slots)", mod_trucks.len());
     let marks = cab_mark::for_tablet(&files, &mods, &mod_trucks, &profiles_mods(game));
     log!("setup: the mod: made");
-    let (bytes, built) = game_mod::build(&files, &mod_trucks, &marks).map_err(|e| e.to_string())?;
+    let workshop = game.workshop();
+    let (bytes, built) =
+        game_mod::build(&files, &mod_trucks, &marks, game.kind, workshop.as_deref()).map_err(|e| e.to_string())?;
+    if !built.ythq.is_empty() {
+        log!("setup: the mod: YTHQ Tablet's own screens patched: {}", built.ythq.join(", "));
+    }
+    if !built.ythq_tablets.is_empty() {
+        log!(
+            "setup: the mod: YTHQ Tablet's tablets' own screens: {} ({} definitions pointed at them)",
+            built.ythq_tablets.len(),
+            built.ythq_accessories.len()
+        );
+    }
+    if !built.ythq_tablet_materials.is_empty() {
+        log!(
+            "setup: the mod: YTHQ Tablet's tablets' screen materials carried at paths of the mod's own: {}: {}",
+            built.ythq_tablet_materials.len(),
+            built.ythq_tablet_materials.join(", ")
+        );
+    }
+    if let Some(problem) = &built.ythq_problem {
+        log!("setup: the mod: of YTHQ Tablet's own screens, not patched: {problem}");
+    }
     log!("setup: the mod: made, {} bytes", bytes.len());
     Ok((bytes, built, apart))
 }
@@ -417,10 +439,8 @@ fn look_at_mods(inner: &Inner, looked: &mut HashMap<PathBuf, ModsStamp>) {
 /// [`look_at_mods`] at `game`.
 fn look_at_game_mods(game: &Game, looked: &mut HashMap<PathBuf, ModsStamp>) {
     let Some(ours) = places::westplay_documents().map(|dir| dir.join(game_mod::file_name(game.kind))) else { return };
-    // The game has it open: nothing to write while it does. A mod that's gone (taken out by hand,
-    // or never made) is made again from this look — not waited for on setup (owner 2026-11-14: the
-    // companion kept the game's own screens after the mod was taken out).
-    if game::running() {
+    // Not set up yet (setup makes it), or the game has it open.
+    if !ours.is_file() || game::running() {
         return;
     }
     let mods = installed_mod_files(game);
@@ -472,16 +492,28 @@ fn look_at_game_mods(game: &Game, looked: &mut HashMap<PathBuf, ModsStamp>) {
     // The game's own screens as it has them now (a DLC installed since, as the Coaches DLC's coaches, or a script a
     // game update changed).
     let game_screens_current = game_mod::game_screens_current(&files, &ours);
+    // YTHQ Tablet's own screens too: installed since the mod was made, or updated (its scripts are the trucks'
+    // factory screens with it).
+    let workshop = game.workshop();
+    let ythq_current = game_mod::ythq_screens_current(game.kind, workshop.as_deref(), &ours);
     let marks = cab_mark::for_tablet(&files, &mods, &mod_trucks, &profiles_mods(game));
     let marks_current = cab_mark::current(&marks, &ours);
-    if wanted != present || !game_screens_current || !marks_current {
+    if wanted != present || !game_screens_current || !ythq_current || !marks_current || !addons_current(&ours) {
         if !game_screens_current {
             log!("setup: the game's screens in WestPlay's mod aren't as the game has them (a DLC since, an update)");
         }
-        let made = game_mod::build(&files, &mod_trucks, &marks).map_err(|error| error.to_string());
+        if !ythq_current {
+            log!(
+                "setup: YTHQ Tablet's screens in WestPlay's mod aren't as its archive has them (installed since, or \
+                 updated)"
+            );
+        }
+        let made =
+            game_mod::build(&files, &mod_trucks, &marks, game.kind, workshop.as_deref()).map_err(|e| e.to_string());
         let made = made.and_then(|(bytes, built)| {
             let dir = ours.parent().ok_or("no folder")?;
             game_mod::install(&bytes, dir, game.kind).map_err(|error| error.to_string())?;
+            let _ = write_addons(&ours);
             Ok(built)
         });
         let built = match made {
@@ -491,13 +523,20 @@ fn look_at_game_mods(game: &Game, looked: &mut HashMap<PathBuf, ModsStamp>) {
         };
         log!(
             "setup: WestPlay's mod made again: the tablet at {} places (was {}), {} of them the mods' trucks'; the \
-             cab's mark in {} dashboards",
+             cab's mark in {} dashboards; YTHQ Tablet's screens patched: {} (its tablets' own: {}, their definitions: \
+             {}, their screen materials: {})",
             wanted.len(),
             present.len(),
             wanted.iter().filter(|spot| mod_trucks.contains(spot)).count(),
-            built.cab_marks
+            built.cab_marks,
+            built.ythq.len(),
+            built.ythq_tablets.len(),
+            built.ythq_accessories.len(),
+            built.ythq_tablet_materials.len()
         );
-        log!("setup: patched {:?}; missing {:?}", built.patched, built.missing);
+        if let Some(problem) = &built.ythq_problem {
+            log!("setup: of YTHQ Tablet's own screens, not patched: {problem}");
+        }
         for (script, why) in &marks.left {
             log!("setup: the cab's mark not in {script}: {why}");
         }
@@ -567,6 +606,28 @@ pub async fn install_into_game(
 /// `mod` folder and out of each profile's active mods (the game closed: the companion installs only then).
 /// Two copies would stop the game when a screen starts, and the plugin doesn't mount its own while the old one
 /// is there.
+/// Where the add-ons' digest is kept, beside WestPlay's mod: what the mod carries of them ([`game_mod::addons_digest`]).
+fn addons_file(ours: &Path) -> Option<PathBuf> {
+    // Beside its own mod, by its name: the two games' mods share a folder.
+    Some(ours.with_extension("addons"))
+}
+
+/// Whether the mod at `ours` carries the add-ons this build brings, as its digest file says.
+fn addons_current(ours: &Path) -> bool {
+    addons_file(ours)
+        .and_then(|file| std::fs::read_to_string(file).ok())
+        .and_then(|text| text.trim().parse::<u64>().ok())
+        .is_some_and(|said| said == game_mod::addons_digest())
+}
+
+/// Says which add-ons the mod at `ours` carries, for the next look.
+fn write_addons(ours: &Path) -> std::io::Result<()> {
+    match addons_file(ours) {
+        Some(file) => std::fs::write(file, game_mod::addons_digest().to_string()),
+        None => Ok(()),
+    }
+}
+
 fn install_mod(game: &Game) -> Result<(), String> {
     let (bytes, built, apart) = build_mod(game)?;
     if let Some(why) = &built.not_sharp {
@@ -575,6 +636,7 @@ fn install_mod(game: &Game) -> Result<(), String> {
     let ours = places::westplay_documents().ok_or("noDocuments")?;
     log!("setup: the mod: written into {}", ours.display());
     game_mod::install(&bytes, &ours, game.kind).map_err(|e| format!("Couldn't write the mod: {e}"))?;
+    let _ = write_addons(&ours.join(game_mod::file_name(game.kind)));
     tablet::write_apart(&apart, &ours, game.kind).map_err(|e| format!("Couldn't write the mod: {e}"))?;
     if let Some(documents) = places::game_documents(game.kind) {
         log!("setup: the mod: WestPlay 1.2's old copy taken out of the game's mods and profiles");
@@ -587,37 +649,6 @@ fn install_mod(game: &Game) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-/// The mod WestPlay ships with (`westplay.scs` beside the program), put where the plugin mounts it from when this PC
-/// has none yet (owner 2026-11-03: “缺了就放一份”). It is a stand-in: built from another PC's game, it carries
-/// the previous [`game_mod::LAYOUT`], so [`look_at_mods`] makes it again from this PC's own game and installed mods as
-/// soon as the game is closed.
-pub fn seed_mod(resource: Option<PathBuf>) {
-    let (Some(seed), Some(dir)) =
-        (resource.map(|dir| dir.join(game_mod::file_name(Kind::Ets2))), places::westplay_documents())
-    else {
-        return;
-    };
-    let ours = dir.join(game_mod::file_name(Kind::Ets2));
-    if ours.is_file() || !seed.is_file() {
-        return;
-    }
-    match seed_into(&seed, &dir) {
-        Ok(size) => log!("setup: the mod that came with WestPlay is in place ({size} B): the PC's own game makes it again"),
-        Err(error) => log!("setup: the mod that came with WestPlay not put in place: {error}"),
-    }
-}
-
-/// [`seed_mod`]'s copy, on its own: `seed` into `dir` as WestPlay's mod (`game_mod::file_name`), unless one is there
-/// already. Answers how many bytes were put in place.
-fn seed_into(seed: &Path, dir: &Path) -> std::io::Result<u64> {
-    let bytes = std::fs::read(seed)?;
-    if dir.join(game_mod::file_name(Kind::Ets2)).is_file() {
-        return Ok(0);
-    }
-    game_mod::install(&bytes, dir, Kind::Ets2)?;
-    Ok(bytes.len() as u64)
 }
 
 fn install_plugin(game: &Game, ours: &Path, administrator: bool) -> PluginOutcome {
@@ -886,27 +917,6 @@ mod tests {
         assert!(script.contains("Get-Process -Id 4242"));
         assert!(script.contains("WaitForExit"));
         assert!(script.contains(r"@('C:\Users\O''Brien\WestPlay')"));
-    }
-
-    /// The mod that came with WestPlay: put where there is none, never over one this PC already has.
-    #[test]
-    fn the_seed_is_put_in_place_only_where_theres_no_mod() {
-        let root = std::env::temp_dir().join(format!("westplay-seed-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let resources = root.join("resources");
-        let documents = root.join("documents");
-        std::fs::create_dir_all(&resources).unwrap();
-        std::fs::create_dir_all(&documents).unwrap();
-        let seed = resources.join(game_mod::file_name(Kind::Ets2));
-        std::fs::write(&seed, b"a stand-in").unwrap();
-
-        assert_eq!(seed_into(&seed, &documents).unwrap(), 10);
-        assert_eq!(std::fs::read(documents.join(game_mod::file_name(Kind::Ets2))).unwrap(), b"a stand-in");
-
-        std::fs::write(documents.join(game_mod::file_name(Kind::Ets2)), b"made here").unwrap();
-        assert_eq!(seed_into(&seed, &documents).unwrap(), 0);
-        assert_eq!(std::fs::read(documents.join(game_mod::file_name(Kind::Ets2))).unwrap(), b"made here");
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// The real step, hidden: it waits for a process still running (a short ping) to end, then removes a folder.

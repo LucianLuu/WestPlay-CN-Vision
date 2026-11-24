@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useAppIcon } from '../state/hooks'
+import { useAppIcon, useLook } from '../state/hooks'
 import { MapView } from '../dashboard/MapView'
 import { type AppId, APPS } from '../state/apps'
 import { useLaunchStyle, whenTransitionEnds } from '../state/launch'
@@ -14,6 +14,8 @@ import { RadioApp } from './radio/RadioApp'
 import { SafariApp } from './safari/SafariApp'
 import { SettingsApp } from './settings/SettingsApp'
 import { WebApp } from './web/WebAppScreen'
+import { YouTubeApp } from './youtube/YouTubeApp'
+import { setDark, setSite } from './youtube/youtube'
 import { VehicleApp } from './vehicle/VehicleApp'
 import { WeatherApp } from './weather/WeatherApp'
 import './apps.css'
@@ -91,7 +93,10 @@ function AppContent({ app }: { app: AppId }) {
     // local layer the app starts, in the slot Spotify used to have (as the site had).
     return <NeteaseApp />
     case 'youtube':
-      return <WebApp site="bilibili" />
+      // Bilibili, drawn by YouTube's own app: its page, its search, its player controls. What
+      // answers it is Bilibili (crates/host bilibili.rs), whose page is hidden behind this one, as
+      // YouTube's is for YouTube.
+      return <BilibiliApp />
     case 'youtubeMusic':
       // QQ Music's own player (crates/host qq_music.rs, ui/src/cabin/apps/qq): WestPlay's drawn shell
       // over a hidden page of the middle layer's own data.
@@ -118,6 +123,27 @@ function AppContent({ app }: { app: AppId }) {
     default:
       return <NotBuiltYet app={app} />
   }
+}
+
+/**
+ * Bilibili, in YouTube's own app: the same page, the same shelves, the same player controls. Its
+ * commands go to Bilibili's hidden page (crates/host `bilibili.rs`) while it's open, and back to
+ * YouTube's when it goes: one YouTube app draws both, its two sites told apart by `setSite`.
+ */
+function BilibiliApp() {
+  // The look on the screen (state/hooks.ts `useLook`): Bilibili has no switch of its own, it
+  // follows the cab — dark with night falling, light in the day, in `auto` as in the settings.
+  const { appearance } = useLook()
+  // Set before the first render, so the page draws itself in Bilibili's look from the start (and
+  // its commands go to Bilibili's page).
+  const [ready] = useState(() => {
+    setSite('bilibili')
+    setDark(appearance === 'dark')
+    return true
+  })
+  useEffect(() => setDark(appearance === 'dark'), [appearance])
+  useEffect(() => () => setSite('youtube'), [])
+  return ready ? <YouTubeApp /> : null
 }
 
 /**

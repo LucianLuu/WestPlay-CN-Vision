@@ -12,7 +12,7 @@ import { kanaTyped } from './kana'
  * characters, so Chinese types Latin letters, as Vietnamese does without Telex's tone marks.
  */
 
-/** A keyboard, by the letters it has. `zh` is the cabin's own Chinese input method's keyboard (plain QWERTY,
+/** A keyboard, by the letters it has. zh is the cabin's own Chinese input method's keyboard (plain QWERTY,
  * the letters compose pinyin — store.ts, pinyin.ts). */
 export type Language =
   | 'en'
@@ -132,7 +132,7 @@ const BY_LANGUAGE: Record<string, Language> = {
 
 /** The keyboard for the cabin's language (a game code, `de_de`): its own, or QWERTY (English, Italian, Dutch,
  * Portuguese, Polish, Romanian, the Baltic languages, Canada's French, Vietnamese), or the cabin's Chinese
- * input method (`zh`, for the game's Chinese). */
+ * input method (zh, for the game's Chinese). */
 export function keyboardLanguage(language: CabinLanguage): Language {
   return BY_LANGUAGE[language] ?? BY_LANGUAGE[language.slice(0, 2)] ?? 'en'
 }

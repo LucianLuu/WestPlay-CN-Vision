@@ -124,6 +124,13 @@ export function previewAnswer(question: Question): Promise<YouTubeAnswer> {
       answer = { videos: Array.from({ length: 12 }, (_, i) => video(from + i, '')), more: String(from + 12) }
       break
     }
+    case 'danmaku':
+      // A preview has no danmaku of its own to draw.
+      answer = { danmaku: [] }
+      break
+    case 'sendDanmaku':
+      answer = { sent: true }
+      break
   }
   return new Promise((resolve) => setTimeout(() => resolve(answer), 350))
 }

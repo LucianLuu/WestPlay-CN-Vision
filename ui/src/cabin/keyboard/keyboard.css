@@ -123,29 +123,6 @@
   font-weight: 600;
 }
 
-/* 中/英/土 on the globe key: the languages it takes the keyboard round, the one in use lit. */
-.keyboard .key.fn .key-tri {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: 0;
-  line-height: 1;
-}
-
-.keyboard .key.fn .key-tri > span + span::before {
-  content: '/';
-  margin: 0 1px;
-  opacity: 0.4;
-  font-weight: 400;
-}
-
-.keyboard .key.fn .key-tri > span:not(.on) {
-  opacity: 0.4;
-}
-
 .keyboard .key:has(> svg) {
   display: grid;
   place-items: center;
@@ -375,6 +352,27 @@
   }
 }
 
+/* A short screen (shell.css): the keyboard about two thirds as tall, so it leaves room for what's typed into. Its
+   corners the sidebar's as every panel's (owner 2026-11-03): a wide padding round smaller keys set close together
+   (owner: the keys filling it to its edges "looks awful"), at the same height. */
+@container carplay (max-height: 520px) {
+  .keyboard {
+    /* Its height and margin: shell.css's short screen's; its padding wide round the smaller keys (owner
+       2026-11-03), as its corners give it. */
+    --gap: 5px;
+    --key-radius: 13px;
+    gap: 5px;
+  }
+
+  .keyboard .key {
+    font-size: 22px;
+  }
+
+  .keyboard .key.fn {
+    font-size: 16px;
+  }
+}
+
 /* The Chinese input method's bar (`InputMethod.tsx`), hanging over the screen above the keyboard's panel as a
    phone's does: the pinyin being composed in a pill at its left end, the candidates beside it, each numbered
    with the digit that picks it (the first taken by the space bar, lit as a white chip, as the bar of the phone
@@ -535,30 +533,10 @@
   }
 }
 
-
-/* A short screen (shell.css): the keyboard about two thirds as tall, so it leaves room for what's typed into. Its
-   corners the sidebar's as every panel's (owner 2026-11-03): a wide padding round smaller keys set close together
-   (owner: the keys filling it to its edges "looks awful"), at the same height. */
+/* The input method's bar with a short screen's keyboard: a shorter strip, its candidate cells narrower, so nine
+   of them still fit over keys two thirds the size. Its place is the keyboard's (shell.css's short screen's
+   variables, which the bar takes as the keyboard does). */
 @container carplay (max-height: 520px) {
-  .keyboard {
-    /* Its height and margin: shell.css's short screen's; its padding wide round the smaller keys (owner
-       2026-11-03), as its corners give it. */
-    --gap: 5px;
-    --key-radius: 13px;
-    gap: 5px;
-  }
-
-  .keyboard .key {
-    font-size: 22px;
-  }
-
-  .keyboard .key.fn {
-    font-size: 16px;
-  }
-
-  /* The input method's bar with it: a shorter strip, its candidate cells narrower, so nine of them still fit
-     over keys two thirds the size. Its place is the keyboard's (shell.css's short screen's variables, which the
-     bar takes as the keyboard does). */
   .keyboard-ime {
     height: 50px;
     gap: 8px;
@@ -594,4 +572,3 @@
     height: 17px;
   }
 }
-

@@ -223,7 +223,8 @@ mod tests {
             ],
         );
         let found = marks(&game.mounted(), &[], &BTreeSet::from(["scania.r"]), &[]);
-        let (bytes, built) = crate::game_mod::build(&game.mounted(), &[], &found).unwrap();
+        let (bytes, built) =
+            crate::game_mod::build(&game.mounted(), &[], &found, crate::game::Kind::Ets2, None).unwrap();
         assert_eq!(built.cab_marks, 1);
         let at = game.0.join("westplay.scs");
         std::fs::write(&at, bytes).unwrap();

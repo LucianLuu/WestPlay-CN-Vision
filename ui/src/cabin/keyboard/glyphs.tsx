@@ -64,7 +64,6 @@ export function KeysGlyph() {
     </svg>
   )
 }
-
 /** The candidates' paging keys (the bar's right end): a chevron, back or on. */
 export function PageGlyph({ back = false }: { back?: boolean }) {
   return (

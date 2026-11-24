@@ -80,16 +80,10 @@ describe('press', () => {
     const turkish = initialKeyboard('tr')
     const shift = { kind: 'shift' } as const
     expect(typed([shift, char('i'), shift, char('ı')], turkish).text).toBe('İI')
-    // The globe takes the keyboard round Chinese → English → Turkish: from Turkish it comes to Chinese, whose
-    // letters are plain QWERTY (a capital i is I, not Turkish İ).
+    // The globe brings the other language's letters.
     expect(typed([{ kind: 'globe' }, shift, char('i')], turkish)).toMatchObject({
       text: 'I',
       state: { language: 'zh' },
-    })
-    // And English comes first from Chinese, so the Turkish letters are two presses on.
-    expect(typed([{ kind: 'globe' }, { kind: 'globe' }, shift, char('i')], initialKeyboard('zh'))).toMatchObject({
-      text: 'İ',
-      state: { language: 'tr' },
     })
   })
 

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { YouTubeComment, YouTubeDetail, YouTubeVideo } from '../../../shared/host'
 import { formatClock } from './time'
 import { useCabin } from '../../state/store'
 import { useText } from '../../state/text'
@@ -6,6 +7,9 @@ import {
   BackGlyph,
   CaptionsGlyph,
   CheckGlyph,
+  ForwardGlyph,
+  FullScreenGlyph,
+  HomeGlyph,
   NextGlyph,
   PauseGlyph,
   PlayGlyph,
@@ -17,14 +21,17 @@ import {
 } from './glyphs'
 import { Thumbnail } from './YouTubeApp'
 import {
+  ask,
   closePlayer,
   comingUp,
   command,
   followArea,
   leavePlayer,
+  currentSite,
   nextVideo,
   openChannel,
   play,
+  playPart,
   previousVideo,
   QUALITIES,
   seekBy,
@@ -35,6 +42,7 @@ import {
   setStableVolume,
   setVoiceBoost,
   setVolume,
+  stopVideo,
   toggleMute,
   useYouTube,
 } from './youtube'
@@ -46,6 +54,10 @@ const DOUBLE_TAP_MS = 300
 /** How long the "10 seconds" stays after the last tap, during which each tap adds 10 more, ms. */
 const SKIP_MS = 800
 const SKIP_SECONDS = 10
+/** How long the volume stays on the picture after the wheel or an arrow key last changed it, ms. */
+const VOLUME_HINT_MS = 1400
+/** How much one turn of the wheel, or one arrow key, changes the volume. */
+const VOLUME_STEP = 5
 
 type Side = 'back' | 'forward'
 
@@ -93,11 +105,69 @@ function OpenPlayer() {
   }, [skip])
   useEffect(() => () => clearTimeout(lastTap.current.single), [])
 
-  // The video where the CarPlay area is, in the frame's pixels; again if the frame changes.
+  // Bilibili's own page: its picture full where the window is (`full`: the details beside it put away), and its
+  // controls only while the pointer is on the picture (owner 2026-11-22).
+  const [full, setFull] = useState(false)
+  const [hover, setHover] = useState(false)
+  // Bilibili's page: its video on the left, its details (and Up next) beside it, its parts under them.
+  const bilibili = currentSite() === 'bilibili'
+  // Its player page is always dark (its client's own, and the owner's ask: "播放页默认深色"), even when the
+  // app's page around it is light.
+  const dark = useYouTube((store) => store.dark) || bilibili
+
+  // Full screen (Bilibili's own): Esc gives the details back.
   useEffect(() => {
+    if (!full) return
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFull(false)
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [full])
+
+  // The part of its series playing (its own `?p=`): what 选集 asks for.
+  const part = useYouTube((store) => store.part)
+
+  // The volume, shown on the picture while it's changed by the wheel or the arrow keys (as its player shows it).
+  const [volumeHint, setVolumeHint] = useState<number | null>(null)
+  const hintTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const nudgeVolume = (delta: number) => {
+    const now = useYouTube.getState()
+    const level = Math.round(Math.min(100, Math.max(0, (now.muted ? 0 : now.volume) + delta)))
+    setVolume(level)
+    setHover(true)
+    touch()
+    setVolumeHint(level)
+    clearTimeout(hintTimer.current)
+    hintTimer.current = setTimeout(() => setVolumeHint(null), VOLUME_HINT_MS)
+  }
+  useEffect(() => () => clearTimeout(hintTimer.current), [])
+
+  // The arrow keys turn it down or up, as the player's own do; the wheel over the picture too.
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+      // A field of the page's own takes the keys (the page's search).
+      const field = event.target as HTMLElement | null
+      if (field && (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA' || field.isContentEditable)) return
+      event.preventDefault()
+      nudgeVolume(event.key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP)
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [])
+
+  // The video where the CarPlay area is, in the frame's pixels; again if the frame changes. Bilibili's own
+  // player is one pane of its page (the details beside it), so the picture takes the left of the area there.
+  // Laid out first (`useLayoutEffect`): the pane has its size by then, and the first show isn't a zero box.
+  useLayoutEffect(() => {
     const place = () => {
-      const area = document.querySelector('.carplay')?.getBoundingClientRect()
-      if (!area) return
+      const area = document.querySelector(bilibili ? '.yt-stage' : '.carplay')?.getBoundingClientRect()
+      // Not laid out yet (or nothing to place): asked again next frame.
+      if (!area || area.width < 2 || area.height < 2) {
+        const again = requestAnimationFrame(place)
+        return () => cancelAnimationFrame(again)
+      }
       const scale = window.devicePixelRatio
       command({
         action: 'show',
@@ -107,8 +177,17 @@ function OpenPlayer() {
         height: Math.round(area.height * scale),
       })
     }
-    return followArea(place)
-  }, [])
+    // Once now, and once more after the first paint (a font, a row of details, changes the pane's size).
+    const first = requestAnimationFrame(place)
+    const second = setTimeout(place, 120)
+    // Bilibili's pane is its own element (the details beside it change its width), so it's watched too.
+    const stop = followArea(place, document.querySelector('.yt-stage') ?? undefined)
+    return () => {
+      cancelAnimationFrame(first)
+      clearTimeout(second)
+      stop()
+    }
+  }, [bilibili, current?.video, dark, full])
 
   const mine = state !== null && state.video === current?.video
   // Started: it has played once (the cover goes for good).
@@ -138,6 +217,173 @@ function OpenPlayer() {
 
   if (!current) return null
   const cover = started !== current.video
+  if (bilibili) {
+    const previous = previousVideo()
+    const quality = mine && state?.qualityLabel ? biliQuality(state.qualityLabel) : '自动'
+    return (
+      // `yt-player` is the class the shell knows (`.carplay.watching` keeps it and the sidebar, hiding the
+      // rest): without it the page would be hidden and Bilibili's own would show through.
+      <div className={`yt-player yt-bili-player${dark ? ' bili-dark' : ''}${full ? ' full' : ''}`}>
+        {/* Bilibili's own window: its bar across the top (back to the app, and the videos either side), the
+            picture under it (the host draws the video at `.yt-stage`), the details beside it (put away full). */}
+        <div className="yt-bili-main">
+          <div className="bili-topbar">
+            <button type="button" className="bili-home" onClick={stopVideo}>
+              <HomeGlyph />
+              <span>回到主界面</span>
+            </button>
+            <div className="bili-nav">
+              <button
+                type="button"
+                aria-label={text.previous}
+                disabled={!previous}
+                onClick={() => previous && play(previous)}
+              >
+                <BackGlyph />
+              </button>
+              <button
+                type="button"
+                aria-label={text.next}
+                disabled={!coming.length}
+                onClick={() => {
+                  const next = nextVideo()
+                  if (next) play(next)
+                }}
+              >
+                <ForwardGlyph />
+              </button>
+            </div>
+          </div>
+          {/* The picture's own box, and its controls over it — only while the pointer is on the picture
+              (Bilibili's own player), none of them drawn otherwise. */}
+          <div
+            className={hover || menu ? 'yt-stage shown' : 'yt-stage'}
+            onPointerMove={() => setHover(true)}
+            onPointerLeave={() => {
+              if (!menu) setHover(false)
+            }}
+            onPointerDown={(event) => {
+              if (event.target !== event.currentTarget) return
+              setHover(true)
+              if (menu) {
+                setMenu(null)
+                return
+              }
+              // A tap on the picture plays or pauses it, as Bilibili's own.
+              if (ended) command({ action: 'seek', seconds: 0 })
+              command({ action: playing ? 'pause' : 'play' })
+            }}
+            onWheel={(event) => {
+              // The wheel over the picture turns the sound, up or down, as its player's own does.
+              if (event.deltaY === 0) return
+              event.stopPropagation()
+              nudgeVolume(event.deltaY < 0 ? VOLUME_STEP : -VOLUME_STEP)
+            }}
+          >
+            {cover && (
+              <div className="yt-cover">
+                {current.thumbnail && <img referrerPolicy="no-referrer" src={current.thumbnail} alt="" />}
+                <div className="yt-spinner large" role="progressbar" />
+              </div>
+            )}
+            {buffering && <div className="yt-spinner large floating" role="progressbar" />}
+            {/* The volume, while the wheel or the arrow keys change it. */}
+            {volumeHint !== null && (
+              <div key={volumeHint} className="bili-volume-hint" aria-live="polite">
+                <VolumeGlyph muted={volumeHint === 0} />
+                <span>{volumeHint}%</span>
+              </div>
+            )}
+            {skip && (
+              <div key={skip.at} className={`yt-skip ${skip.side}`} aria-live="polite">
+                <span className="yt-skip-arrows" aria-hidden="true">
+                  {skip.side === 'back' ? '◀◀' : '▶▶'}
+                </span>
+                {text.youtube.seconds(skip.seconds)}
+              </div>
+            )}
+            {/* Its controls, as its client's: the progress across the top (pink played), then play, the time, the
+                danmaku, and the picture's own choices on the right. */}
+            <div className="bili-overlay" onPointerDown={(event) => event.stopPropagation()}>
+              <div className="bili-progress">
+                <Progress />
+              </div>
+              <div className="bili-row">
+                <button
+                  type="button"
+                  className="bili-icon play"
+                  aria-label={playing ? text.pause : text.play}
+                  onClick={() => {
+                    setHover(true)
+                    if (ended) command({ action: 'seek', seconds: 0 })
+                    command({ action: playing ? 'pause' : 'play' })
+                  }}
+                >
+                  {ended ? <ReplayGlyph /> : playing ? <PauseGlyph /> : <PlayGlyph />}
+                </button>
+                <span className="bili-time">
+                  {current.live || state?.live ? (
+                    <span className="yt-badge live">{text.youtube.live}</span>
+                  ) : (
+                    <Time />
+                  )}
+                </span>
+                <span className="bili-grow" />
+                <button
+                  type="button"
+                  className="bili-label"
+                  disabled={!mine || state.qualities.length === 0}
+                  onClick={() => setMenu(menu === 'quality' ? null : 'quality')}
+                >
+                  {quality}
+                </button>
+                <button
+                  type="button"
+                  className="bili-label"
+                  disabled={!mine || state.rates.length <= 1}
+                  onClick={() => setMenu(menu === 'speed' ? null : 'speed')}
+                >
+                  {mine && state.rate !== 1 ? `${state.rate}×` : '倍速'}
+                </button>
+                <button
+                  type="button"
+                  className="bili-icon"
+                  aria-label={text.youtube.settings}
+                  disabled={!mine}
+                  onClick={() => setMenu(menu === 'settings' ? null : 'settings')}
+                >
+                  <SettingsGlyph />
+                </button>
+                <Volume onTouch={() => setHover(true)} />
+                <button
+                  type="button"
+                  className="bili-icon"
+                  aria-label={full ? '退出全屏' : '全屏'}
+                  aria-pressed={full}
+                  onClick={() => {
+                    setFull(!full)
+                    setHover(true)
+                  }}
+                >
+                  <FullScreenGlyph />
+                </button>
+              </div>
+              {menu === 'settings' && <SettingsMenu onChosen={() => setMenu(null)} />}
+              {menu === 'quality' && <SettingsMenu onChosen={() => setMenu(null)} start="quality" />}
+              {menu === 'speed' && <SettingsMenu onChosen={() => setMenu(null)} start="speed" />}
+            </div>
+          </div>
+        </div>
+        <BilibiliDetails
+          video={current}
+          part={part}
+          upNext={coming}
+          onPlay={play}
+          onPart={(page) => playPart(current, page)}
+        />
+      </div>
+    )
+  }
   return (
     <div
       className={`yt-player${controls ? ' controls' : ''}`}
@@ -176,10 +422,16 @@ function OpenPlayer() {
         if (!side) toggle()
       }}
       onPointerMove={() => controls && touch()}
+      onWheel={(event) => {
+        // The wheel over the picture turns the sound, up or down, as the player's own does.
+        if (event.deltaY === 0) return
+        event.stopPropagation()
+        nudgeVolume(event.deltaY < 0 ? VOLUME_STEP : -VOLUME_STEP)
+      }}
     >
       {cover && (
         <div className="yt-cover">
-          {current.thumbnail && <img src={current.thumbnail} alt="" />}
+          {current.thumbnail && <img referrerPolicy="no-referrer" src={current.thumbnail} alt="" />}
           <div className="yt-spinner large" role="progressbar" />
         </div>
       )}
@@ -343,6 +595,226 @@ function OpenPlayer() {
   )
 }
 
+/**
+ * Bilibili's own details beside its video: who uploaded it and their numbers, the video's own numbers, its
+ * description, its parts (a series' episodes: each plays on its own), and what comes next under them.
+ */
+function BilibiliDetails({
+  video,
+  part,
+  upNext,
+  onPlay,
+  onPart,
+}: {
+  video: YouTubeVideo
+  part: number
+  upNext: YouTubeVideo[]
+  onPlay(video: YouTubeVideo): void
+  onPart(page: number): void
+}) {
+  const [detail, setDetail] = useState<YouTubeDetail | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let live = true
+    setDetail(null)
+    setFailed(false)
+    ask({ action: 'detail', video: video.video })
+      .then((answer) => {
+        if (live) setDetail(answer.detail ?? null)
+      })
+      .catch(() => live && setFailed(true))
+    return () => {
+      live = false
+    }
+  }, [video.video])
+  // What's beside the video: its own description (简介) or its comments (评论), as its page's two tabs.
+  const [tab, setTab] = useState<'intro' | 'comments'>('intro')
+  const [sort, setSort] = useState<'hot' | 'new'>('hot')
+  const [comments, setComments] = useState<YouTubeComment[]>([])
+  const [more, setMore] = useState<string | null>(null)
+  const [commentsState, setCommentsState] = useState<'loading' | 'done' | 'failed'>('loading')
+  useEffect(() => {
+    if (tab !== 'comments') return
+    let live = true
+    setComments([])
+    setMore(null)
+    setCommentsState('loading')
+    ask({ action: 'comments', video: video.video, sort })
+      .then((answer) => {
+        if (!live) return
+        setComments(answer.failed ? [] : (answer.comments ?? []))
+        setMore(answer.failed ? null : (answer.more ?? null))
+        setCommentsState(answer.failed ? 'failed' : 'done')
+      })
+      .catch(() => live && setCommentsState('failed'))
+    return () => {
+      live = false
+    }
+  }, [tab, sort, video.video])
+  const more_comments = () => {
+    if (!more) return
+    setCommentsState('loading')
+    ask({ action: 'comments', video: video.video, sort, more }).then((answer) => {
+      setComments((now) => [...now, ...(answer.comments ?? [])])
+      setMore(answer.failed ? null : (answer.more ?? null))
+      setCommentsState(answer.failed ? 'failed' : 'done')
+    })
+  }
+  const parts = detail?.parts ?? []
+  return (
+    <aside className="yt-bili-side">
+      {/* Its two tabs, as its page has them over the details: the video's own, or its comments. */}
+      <div className="bili-detail-tabs">
+        <button
+          type="button"
+          className={tab === 'intro' ? 'bili-detail-tab on' : 'bili-detail-tab'}
+          aria-pressed={tab === 'intro'}
+          onClick={() => setTab('intro')}
+        >
+          简介
+        </button>
+        <button
+          type="button"
+          className={tab === 'comments' ? 'bili-detail-tab on' : 'bili-detail-tab'}
+          aria-pressed={tab === 'comments'}
+          onClick={() => setTab('comments')}
+        >
+          评论
+        </button>
+      </div>
+      <div className="yt-bili-scroll">
+        {tab === 'comments' ? (
+          <>
+            <div className="bili-sorts">
+              <button
+                type="button"
+                className={sort === 'hot' ? 'bili-sort on' : 'bili-sort'}
+                aria-pressed={sort === 'hot'}
+                onClick={() => setSort('hot')}
+              >
+                最热
+              </button>
+              <button
+                type="button"
+                className={sort === 'new' ? 'bili-sort on' : 'bili-sort'}
+                aria-pressed={sort === 'new'}
+                onClick={() => setSort('new')}
+              >
+                最新
+              </button>
+            </div>
+            {comments.map((comment) => (
+              <article key={comment.id} className="bili-comment">
+                <div className="bili-comment-who">
+                  {comment.avatar ? (
+                    <img referrerPolicy="no-referrer" className="bili-comment-face" src={comment.avatar} alt="" />
+                  ) : (
+                    <span className="bili-comment-face blank" />
+                  )}
+                  <span className="bili-comment-name">{comment.name}</span>
+                </div>
+                <p className="bili-comment-text">{comment.text}</p>
+                <div className="bili-comment-foot">
+                  {comment.time && <span>{comment.time}</span>}
+                  {comment.likes && <span>{comment.likes} 赞</span>}
+                  {comment.replies > 0 && <span>共 {comment.replies} 条回复</span>}
+                </div>
+              </article>
+            ))}
+            {commentsState === 'loading' && <div className="yt-spinner" role="progressbar" />}
+            {commentsState === 'failed' && comments.length === 0 && (
+              <p className="bili-desc">Bilibili 没有给出评论。</p>
+            )}
+            {commentsState === 'done' && comments.length === 0 && <p className="bili-desc">还没有评论。</p>}
+            {more && commentsState !== 'loading' && (
+              <button type="button" className="bili-comments-more" onClick={more_comments}>
+                查看更多评论
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Who uploaded it, and their numbers. */}
+            <div className="bili-up">
+              {detail?.avatar ? (
+                <img referrerPolicy="no-referrer" className="bili-up-face" src={detail.avatar} alt="" />
+              ) : (
+                <span className="bili-up-face blank" />
+              )}
+              <div className="bili-up-text">
+                <span className="bili-up-name">{detail?.channel || video.channel}</span>
+                <span className="bili-up-note">
+                  {failed ? '详情未能加载' : detail ? `${detail.views} · ${detail.pubdate}` : '正在加载…'}
+                </span>
+              </div>
+              <button type="button" className="bili-follow">
+                关注
+              </button>
+            </div>
+            {/* The video's own numbers, as Bilibili's row of them. */}
+            {detail && (
+              <div className="bili-stats">
+                <span>
+                  <b>{detail.likes}</b>点赞
+                </span>
+                <span>
+                  <b>{detail.coins}</b>投币
+                </span>
+                <span>
+                  <b>{detail.favorites}</b>收藏
+                </span>
+                <span>
+                  <b>{detail.danmaku}</b>弹幕
+                </span>
+              </div>
+            )}
+            <h2 className="bili-video-title">{video.title}</h2>
+            {detail?.desc && <p className="bili-desc">{detail.desc}</p>}
+            {/* A series' episodes: each its own part, the one playing lit. */}
+            {parts.length > 1 && (
+              <div className="bili-parts">
+                <span className="bili-parts-title">{`选集 · ${parts.length}`}</span>
+                <div className="bili-parts-grid">
+                  {parts.map((one) => (
+                    <button
+                      key={one.cid}
+                      type="button"
+                      className={one.page === part ? 'bili-part on' : 'bili-part'}
+                      title={`${one.page}. ${one.title}`}
+                      aria-pressed={one.page === part}
+                      onClick={() => onPart(one.page)}
+                    >
+                      {one.page}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* What comes next, Bilibili's own list under the details. */}
+            {upNext.length > 0 && (
+              <div className="bili-next">
+                <span className="bili-next-title">接下来播放</span>
+                {upNext.map((next) => (
+                  <button key={next.video} type="button" className="bili-next-row" onClick={() => onPlay(next)}>
+                    <span className="bili-next-thumb">
+                      {next.thumbnail ? <img referrerPolicy="no-referrer" src={next.thumbnail} alt="" loading="lazy" /> : null}
+                      {next.duration && <span className="bili-next-length">{next.duration}</span>}
+                    </span>
+                    <span className="bili-next-text">
+                      <span className="bili-next-name">{next.title}</span>
+                      <span className="bili-next-sub">{next.channel}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </aside>
+  )
+}
+
 /** Where the video is, between YouTube's reports: run on by the clock while it plays. */
 function usePosition(): { time: number; duration: number } {
   const state = useYouTube((store) => store.state)
@@ -449,7 +921,14 @@ function Volume({ onTouch }: { onTouch(): void }) {
   )
 }
 
-type Menu = 'captions' | 'settings'
+type Menu = 'captions' | 'settings' | 'quality' | 'speed'
+
+/** Bilibili's word for a picture's sharpness ("1080p60": "1080P 高清"; a 4K one: "4K 超清"). */
+function biliQuality(label: string): string {
+  const lines = /^(\d{3,4})/.exec(label)?.[1] ?? ''
+  if (!lines) return label || '自动'
+  return Number(lines) >= 2160 ? '4K 超清' : `${lines}P 高清`
+}
 
 /** YouTube's word over its gear for a sharp picture ("720p60": HD; 2160p and over: 4K), or none. */
 function sharpness(label: string): string | null {
@@ -534,11 +1013,11 @@ function speedName(rate: number, normal: string): string {
  * or under it); playback speed (on the videos after too); the audio track (a video with dubbed ones);
  * Stable volume and Voice boost (a video that offers them).
  */
-function SettingsMenu({ onChosen }: { onChosen(): void }) {
+function SettingsMenu({ onChosen, start }: { onChosen(): void; start?: 'quality' | 'speed' }) {
   const text = useText()
   const state = useYouTube((store) => store.state)
   const quality = useYouTube((store) => store.quality)
-  const [page, setPage] = useState<'quality' | 'speed' | 'audio' | null>(null)
+  const [page, setPage] = useState<'quality' | 'speed' | 'audio' | null>(start ?? null)
   if (!state) return null
   const qualities = [
     {

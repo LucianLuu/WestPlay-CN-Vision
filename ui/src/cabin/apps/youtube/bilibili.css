@@ -1,0 +1,1860 @@
+/* Bilibili's own look, drawn over the YouTube app's page (the same components: only the surface changes).
+   Its white page, its pink (Bilibili's own #fb7299), its square-cornered cards three across, its blue-grey
+   text, its icon rail down the left. Loaded after youtube.css, so these win by coming last. */
+
+.youtube-app.bilibili-app,
+.yt-player.yt-bili-player {
+  --yt-surface: #ffffff;
+  --yt-text: #18191c;
+  --yt-dim: #9499a0;
+  --yt-chip: #f1f2f3;
+  --yt-chip-on: #fb7299;
+  --yt-chip-on-text: #ffffff;
+  --yt-field: #f1f2f3;
+  --yt-field-rim: transparent;
+  --yt-red: #fb7299;
+  /* Bilibili's own: its pink, its blue links, its card shadow, its rails. */
+  --bili-pink: #fb7299;
+  --bili-pink-dim: #ffe3ea;
+  --bili-blue: #00aeec;
+  --bili-ink: #18191c;
+  --bili-sub: #9499a0;
+  --bili-line: #e3e5e7;
+  --bili-rail: #ffffff;
+  --bili-card: #ffffff;
+  --bili-hover: #f6f7f8;
+  /* Bilibili's own sizes are the site's, drawn for a browser; in the cab they read small (owner 2026-11-22).
+     Every size below is this much larger (and larger again: "继续放大字号", three videos across the page). */
+  --text-scale: 1.6;
+  font-family: 'Inter Variable', Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #ffffff;
+  color: var(--bili-ink);
+  padding: 0;
+  gap: 0;
+}
+
+/* --- The whole page: a rail down the left, the pages beside it ------------------------------------------- */
+
+.youtube-app.bilibili-app {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  /* Right to its window's edges: the gap the window's own background left above the page was the "缝" the owner
+     saw on the small screen (2026-11-22). */
+  top: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* The bar across the top (Bilibili's: its wordmark, the search, the account), over both columns. */
+.youtube-app.bilibili-app .yt-top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 86px;
+  padding: 0 26px 0 20px;
+  border-bottom: 1px solid var(--bili-line);
+  background: #ffffff;
+}
+
+/* The wordmark where YouTube's back button was: Bilibili's own picture, as its app shows it (bigger: the owner's
+   "放大首页哔哩哔哩图标"). */
+.youtube-app.bilibili-app .yt-top::before {
+  content: '';
+  flex: none;
+  width: 140px;
+  height: 62px;
+  background: url('./bilibili-logo.png') left center / contain no-repeat;
+}
+
+/* YouTube's back button: Bilibili's own, round and quiet. */
+.youtube-app.bilibili-app .yt-round {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bili-chip, #f1f2f3);
+  color: var(--bili-ink);
+  border: 0;
+}
+
+/* The search field: Bilibili's own rounded box, grey, its magnifier at the right. */
+.youtube-app.bilibili-app .text-field {
+  height: 46px;
+  border-radius: 8px;
+  background: #f1f2f3;
+  box-shadow: none;
+  padding-inline: 18px;
+  font-size: calc(19px * var(--text-scale, 1));
+  color: var(--bili-ink);
+}
+
+.youtube-app.bilibili-app .text-field::placeholder {
+  color: var(--bili-sub);
+}
+
+/* The account: Bilibili's blue "Sign in" pill. */
+.youtube-app.bilibili-app .yt-sign-in {
+  flex: none;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 600;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.youtube-app.bilibili-app .yt-sign-in svg {
+  width: 18px;
+  height: 18px;
+}
+
+.youtube-app.bilibili-app .yt-me img,
+.youtube-app.bilibili-app .yt-me svg {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* --- The rail: Bilibili's sections down the left -------------------------------------------------------- */
+
+.bili-rail {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 0;
+  background: #ffffff;
+  border-right: 1px solid var(--bili-line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.bili-rail-item {
+  width: 78px;
+  padding: 12px 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: #61666d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 500;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.bili-rail-item svg {
+  width: 34px;
+  height: 34px;
+}
+
+.bili-rail-item.on {
+  color: var(--bili-pink);
+  background: var(--bili-pink-dim);
+  font-weight: 600;
+}
+
+.bili-rail-item:hover {
+  background: var(--bili-hover);
+}
+
+.bili-rail-item.on:hover {
+  background: var(--bili-pink-dim);
+}
+
+/* The pages take the room beside the rail. */
+.youtube-app.bilibili-app .yt-body {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+  position: relative;
+  background: #ffffff;
+}
+
+.youtube-app.bilibili-app .yt-layer {
+  inset: 0;
+}
+
+/* --- Home and its cards --------------------------------------------------------------------------------- */
+
+.youtube-app.bilibili-app .yt-scroll {
+  padding: 20px 26px 26px;
+}
+
+/* Bilibili's own chips: rounded pills, its pink when chosen. */
+.youtube-app.bilibili-app .yt-chips {
+  display: flex;
+  gap: 10px;
+  padding: 0 0 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.youtube-app.bilibili-app .yt-chip {
+  flex: none;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: #f1f2f3;
+  color: #61666d;
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 500;
+  border: 0;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.youtube-app.bilibili-app .yt-chip.on {
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.youtube-app.bilibili-app .yt-chip:hover {
+  background: #e3e5e7;
+}
+
+.youtube-app.bilibili-app .yt-chip.on:hover {
+  background: #f25d8e;
+}
+
+/* The cards: Bilibili's own, three across the cab's page, square-cornered covers, two lines of title under. */
+.youtube-app.bilibili-app .yt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 26px 20px;
+}
+
+.youtube-app.bilibili-app .yt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.youtube-app.bilibili-app .yt-thumb {
+  border-radius: 6px;
+  aspect-ratio: 16 / 10;
+  background: #e3e5e7;
+  width: 100%;
+}
+
+.youtube-app.bilibili-app .yt-card:hover .yt-thumb {
+  box-shadow: 0 0 0 2px var(--bili-pink);
+}
+
+/* Its length, Bilibili's own: bottom right, small, on a dark wash. */
+.youtube-app.bilibili-app .yt-badge {
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0.55);
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 500;
+}
+
+.youtube-app.bilibili-app .yt-title {
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--bili-ink);
+  /* Bilibili's two lines, then an ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.youtube-app.bilibili-app .yt-sub {
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 400;
+  color: var(--bili-sub);
+}
+
+/* Its rows (a search's results when not in cards, a playlist's videos): the same, a list. */
+.youtube-app.bilibili-app .yt-results {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.youtube-app.bilibili-app .yt-row {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.youtube-app.bilibili-app .yt-row .yt-thumb {
+  aspect-ratio: 16 / 10;
+}
+
+.youtube-app.bilibili-app .yt-row .yt-title {
+  font-size: calc(17px * var(--text-scale, 1));
+}
+
+/* --- A video's page (Up next): Bilibili's own list down the right ---------------------------------------- */
+
+.youtube-app.bilibili-app .yt-now {
+  border-top: 1px solid var(--bili-line);
+  border-radius: 0;
+  background: #ffffff;
+  padding: 12px 22px;
+  color: var(--bili-ink);
+}
+
+.youtube-app.bilibili-app .yt-now .yt-thumb {
+  width: 116px;
+  border-radius: 6px;
+}
+
+.youtube-app.bilibili-app .yt-now .yt-title {
+  font-size: calc(15px * var(--text-scale, 1));
+  -webkit-line-clamp: 1;
+}
+
+/* --- Section titles ------------------------------------------------------------------------------------- */
+
+.youtube-app.bilibili-app .yt-section {
+  font-size: calc(20px * var(--text-scale, 1));
+  font-weight: 700;
+  color: var(--bili-ink);
+}
+
+.youtube-app.bilibili-app .yt-clear {
+  font-size: calc(14px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+/* --- A video's own page (Player.tsx): Bilibili's wash over it -------------------------------------------- */
+
+/* No background of its own: the picture is the host's, drawn under this page (`Player.tsx` asks it to show at
+   `.yt-stage`). Anything painted here — a black root, a black pane — would cover the video and leave its sound
+   alone (owner 2026-11-22: "视频播放只有声音没有画面"). The pane stays clear; the thumbnail cover stands in
+   until it plays. */
+.yt-player.yt-bili-player {
+  background: transparent;
+  --text-scale: 1.6;
+}
+
+.yt-player.yt-bili-player .yt-player-controls {
+  background: linear-gradient(to top, rgb(0 0 0 / 0.72), transparent);
+}
+
+.yt-player.yt-bili-player .yt-progress-fill {
+  background: var(--bili-pink);
+}
+
+/* --- Small things --------------------------------------------------------------------------------------- */
+
+.youtube-app.bilibili-app .yt-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.youtube-app.bilibili-app .yt-start {
+  color: var(--bili-sub);
+  font-size: calc(15px * var(--text-scale, 1));
+}
+
+.youtube-app.bilibili-app .yt-sign-in:hover {
+  background: #f25d8e;
+}
+
+.youtube-app.bilibili-app .yt-recent {
+  background: #f1f2f3;
+}
+
+/* The suggestions under the search: Bilibili's own rows. */
+.youtube-app.bilibili-app .yt-suggestions {
+  padding: 8px 0;
+}
+
+.youtube-app.bilibili-app .yt-suggestion {
+  height: 46px;
+  font-size: calc(16px * var(--text-scale, 1));
+  color: var(--bili-ink);
+  border-radius: 6px;
+}
+
+.youtube-app.bilibili-app .yt-suggestion:hover {
+  background: var(--bili-hover);
+}
+
+/* --- A video's page: Bilibili's own (the video on the left, its details and Up next beside it) ------------ */
+
+/* The page's own surface: the shell's `.yt-player` gives it the box and the layer (`position: absolute;
+   inset: 0`), this splits it in two — the picture on the left, its details beside it. */
+.yt-bili-player {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  /* Cleared on the left, where the host's picture shows; the details beside it paint their own. */
+  background: transparent;
+  color: var(--bili-ink);
+  font-family: 'Inter Variable', Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* The video's pane: the picture is drawn here by the host (`.yt-stage` is the box it's given), Bilibili's own
+   bar above it (`bili-topbar`) and its controls over its bottom. Nothing under the picture is painted: the
+   host's video is the picture. */
+.yt-bili-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: transparent;
+}
+
+.yt-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+
+/* Bilibili's own bar across the top (as its client's): the way back to the app, and the videos either side. */
+.bili-topbar {
+  flex: none;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  /* Its client's dark strip, the same in its light and its night: the video is under it, not behind it. */
+  background: #17181b;
+  color: #e8eaed;
+  border-bottom: 1px solid #0a0b0c;
+}
+
+/* Back to the app, as its own pill (a home, then its words). */
+.bili-home {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px 0 13px;
+  border: 0;
+  border-radius: 8px;
+  background: #34363c;
+  color: #ffffff;
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-home svg {
+  width: 21px;
+  height: 21px;
+}
+
+.bili-home:hover {
+  background: #43464d;
+}
+
+/* The videos either side of this one. */
+.bili-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.bili-nav button {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #b7bbc2;
+  display: grid;
+  place-items: center;
+}
+
+.bili-nav button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bili-nav button:hover {
+  background: #2a2c31;
+  color: #ffffff;
+}
+
+.bili-nav button:disabled {
+  opacity: 0.3;
+}
+
+/* Its controls over the picture's bottom: drawn only while the pointer is on the picture (the picture's own
+   cursor goes with them). */
+.bili-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  padding: 26px 14px 8px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.82), rgb(0 0 0 / 0.42) 55%, transparent);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 160ms ease, visibility 160ms ease;
+}
+
+.yt-stage.shown .bili-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+.yt-stage:not(.shown) {
+  cursor: none;
+}
+
+/* Its progress: the whole width, Bilibili's pink played part over a pale groove. */
+.bili-progress {
+  padding: 0 2px 6px;
+}
+
+.bili-progress .yt-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.28);
+}
+
+.bili-progress .yt-bar-played {
+  background: var(--bili-pink);
+  border-radius: 3px;
+}
+
+.bili-progress .yt-bar-dot {
+  width: 13px;
+  height: 13px;
+  margin-top: -4px;
+  margin-left: -6px;
+  background: var(--bili-pink);
+  box-shadow: 0 0 0 3px rgb(251 114 153 / 0.25);
+}
+
+.bili-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 46px;
+  color: #ffffff;
+}
+
+/* The row's buttons: its icons, white on the picture. */
+.bili-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.bili-icon:hover {
+  background: rgb(255 255 255 / 0.16);
+}
+
+.bili-icon:disabled {
+  opacity: 0.4;
+}
+
+.bili-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Its play, the first: a little larger, Bilibili's own. */
+.bili-icon.play {
+  width: 44px;
+  height: 44px;
+}
+
+.bili-icon.play svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* Its words (the picture's sharpness, the speed), as its client writes them. */
+.bili-label {
+  flex: none;
+  height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #ffffff;
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bili-label:hover {
+  background: rgb(255 255 255 / 0.16);
+}
+
+.bili-label:disabled {
+  opacity: 0.4;
+}
+
+.bili-time {
+  flex: none;
+  margin-left: 4px;
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 500;
+  color: #e5e7ea;
+  font-variant-numeric: tabular-nums;
+}
+
+.bili-grow {
+  flex: 1;
+}
+
+/* The volume, over the picture while the wheel or the arrow keys change it (its player's own card: a speaker, the
+   number, on a pale round box in the middle of the picture, high up). */
+.bili-volume-hint {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 168px;
+  padding: 18px 26px;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 0.94);
+  color: #14151a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.28);
+  z-index: 6;
+}
+
+.bili-volume-hint svg {
+  width: 42px;
+  height: 42px;
+  flex: none;
+}
+
+.bili-volume-hint span {
+  font-size: 34px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Full screen (its own): the picture over the whole window, the details put away, the bar with it. */
+.yt-bili-player.full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.yt-bili-player.full .yt-bili-side,
+.yt-bili-player.full .bili-topbar {
+  display: none;
+}
+
+/* --- The details beside it ------------------------------------------------------------------------------ */
+
+.yt-bili-side {
+  min-width: 0;
+  border-left: 1px solid var(--bili-line);
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.yt-bili-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 16px 16px 24px;
+}
+
+/* Its two tabs over the details (简介, 评论), as its page has them: the one showing in its pink, underlined. */
+.bili-detail-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  height: 70px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--bili-line);
+}
+
+.bili-detail-tab {
+  position: relative;
+  height: 70px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #61666d;
+  font-size: calc(20px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-detail-tab.on {
+  color: var(--bili-pink);
+}
+
+.bili-detail-tab.on::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 26px;
+  height: 3px;
+  margin-left: -13px;
+  border-radius: 2px;
+  background: var(--bili-pink);
+}
+
+/* Its comments (评论区): the order's tab above, then a row per comment. */
+.bili-sorts {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 0 6px;
+}
+
+.bili-sort {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--bili-sub);
+  font-size: calc(13px * var(--text-scale, 1));
+}
+
+.bili-sort.on {
+  color: var(--bili-ink);
+  font-weight: 600;
+}
+
+.bili-comment {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--bili-line);
+}
+
+.bili-comment-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bili-comment-face {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e3e5e7;
+}
+
+.bili-comment-face.blank {
+  display: block;
+}
+
+.bili-comment-name {
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 600;
+  color: #61666d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bili-comment-text {
+  margin: 8px 0 8px;
+  font-size: calc(14px * var(--text-scale, 1));
+  line-height: 1.6;
+  color: var(--bili-ink);
+  overflow-wrap: anywhere;
+}
+
+.bili-comment-foot {
+  display: flex;
+  gap: 14px;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+.bili-comments-more {
+  width: 100%;
+  height: 42px;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f2f3;
+  color: #61666d;
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-comments-more:hover {
+  background: #e3e5e7;
+}
+
+/* The uploader: their face, their name and numbers, Follow (Bilibili's blue pill). */
+.bili-up {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--bili-line);
+}
+
+.bili-up-face {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e3e5e7;
+}
+
+.bili-up-face.blank {
+  display: block;
+}
+
+.bili-up-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bili-up-name {
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 600;
+  color: var(--bili-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bili-up-note {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+.bili-follow {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+/* Its numbers, Bilibili's row. */
+.bili-stats {
+  display: flex;
+  gap: 18px;
+  padding: 12px 0;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+.bili-stats b {
+  color: var(--bili-ink);
+  font-weight: 600;
+  margin-right: 3px;
+}
+
+.bili-video-title {
+  margin: 0 0 8px;
+  font-size: calc(17px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--bili-ink);
+}
+
+.bili-desc {
+  margin: 0 0 14px;
+  font-size: calc(13px * var(--text-scale, 1));
+  line-height: 1.6;
+  color: #61666d;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A series' episodes: numbered keys, the one playing lit, Bilibili's own. */
+.bili-parts {
+  padding: 12px 0;
+  border-top: 1px solid var(--bili-line);
+}
+
+.bili-parts-title {
+  display: block;
+  margin-bottom: 10px;
+  font-size: calc(17px * var(--text-scale, 1));
+  font-weight: 600;
+  color: var(--bili-ink);
+}
+
+.bili-parts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  gap: 10px;
+}
+
+.bili-part {
+  height: 50px;
+  border: 1px solid var(--bili-line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #61666d;
+  font-size: calc(17px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-part.on {
+  border-color: var(--bili-pink);
+  background: var(--bili-pink-dim);
+  color: var(--bili-pink);
+}
+
+/* What comes next, Bilibili's own rows. */
+.bili-next {
+  padding-top: 12px;
+  border-top: 1px solid var(--bili-line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bili-next-title {
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 600;
+  color: var(--bili-ink);
+}
+
+.bili-next-row {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 10px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.bili-next-thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #e3e5e7;
+}
+
+.bili-next-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bili-next-length {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0.6);
+  color: #ffffff;
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 500;
+}
+
+.bili-next-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bili-next-name {
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--bili-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bili-next-sub {
+  font-size: calc(11px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+/* --- The rail's own tools, under its sections ------------------------------------------------------------ */
+
+.bili-rail-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.bili-rail-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.bili-rail-me {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: #f1f2f3;
+  color: #61666d;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.bili-rail-me img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bili-rail-me svg {
+  width: 24px;
+  height: 24px;
+}
+
+.bili-rail-me.on {
+  border-color: var(--bili-pink);
+}
+
+.bili-rail-tool {
+  width: 46px;
+  height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #61666d;
+  display: grid;
+  place-items: center;
+}
+
+.bili-rail-tool:hover {
+  background: var(--bili-hover);
+}
+
+.bili-rail-tool svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* --- The rail's section title, where YouTube's chips go -------------------------------------------------- */
+
+.bili-section-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding-right: 8px;
+  font-size: calc(19px * var(--text-scale, 1));
+  font-weight: 700;
+  color: var(--bili-pink);
+}
+/* --- Bilibili's own night (its rail's moon): the app's surface only -------------------------------------- */
+
+.youtube-app.bilibili-app.bili-dark,
+.yt-bili-player.bili-dark {
+  --bili-ink: #e7e9eb;
+  --bili-sub: #8b9096;
+  --bili-line: #2b2f36;
+  --bili-hover: #22262c;
+  --bili-pink-dim: #3a2530;
+  color: #e7e9eb;
+}
+
+/* The app's own surface; the player's pane stays clear for the host's picture. */
+.youtube-app.bilibili-app.bili-dark {
+  background: #15171b;
+}
+
+.youtube-app.bilibili-app.bili-dark .yt-top,
+.youtube-app.bilibili-app.bili-dark .bili-rail,
+.youtube-app.bilibili-app.bili-dark .yt-body {
+  background: #15171b;
+}
+
+.youtube-app.bilibili-app.bili-dark .text-field,
+.youtube-app.bilibili-app.bili-dark .yt-chip,
+.youtube-app.bilibili-app.bili-dark .bili-rail-me {
+  background: #23272e;
+  color: #e7e9eb;
+}
+
+.youtube-app.bilibili-app.bili-dark .text-field::placeholder {
+  color: #8b9096;
+}
+
+.youtube-app.bilibili-app.bili-dark .yt-chip.on {
+  background: var(--bili-pink);
+  color: #ffffff;
+}
+
+.youtube-app.bilibili-app.bili-dark .yt-thumb,
+.youtube-app.bilibili-app.bili-dark .yt-now,
+.youtube-app.bilibili-app.bili-dark .yt-sign-in {
+  background: #23272e;
+}
+
+.youtube-app.bilibili-app.bili-dark .yt-title,
+.youtube-app.bilibili-app.bili-dark .yt-section {
+  color: #e7e9eb;
+}
+
+.yt-bili-player.bili-dark .yt-bili-side {
+  background: #1b1e23;
+  border-color: #2b2f36;
+}
+
+.yt-bili-player.bili-dark .bili-part {
+  color: #e7e9eb;
+  background: #23272e;
+  border-color: #2b2f36;
+}
+
+.yt-bili-player.bili-dark .bili-desc,
+.yt-bili-player.bili-dark .bili-time,
+.yt-bili-player.bili-dark .bili-stats {
+  color: #8b9096;
+}
+
+.yt-bili-player.bili-dark .bili-stats b {
+  color: #e7e9eb;
+}
+
+/* Its tabs and its comments, at night. */
+.yt-bili-player.bili-dark .bili-detail-tab {
+  color: #8b9096;
+}
+
+.yt-bili-player.bili-dark .bili-detail-tab.on {
+  color: var(--bili-pink);
+}
+
+.yt-bili-player.bili-dark .bili-comment-face,
+.yt-bili-player.bili-dark .bili-up-face.blank {
+  background: #23272e;
+}
+
+.yt-bili-player.bili-dark .bili-comments-more {
+  background: #23272e;
+  color: #c9cdd3;
+}
+
+.yt-bili-player.bili-dark .bili-comments-more:hover {
+  background: #2b2f36;
+}
+
+/* The volume, over the picture instead of on the page's white (its own quiet row control). */
+.yt-bili-overlay .yt-volume,
+.bili-overlay .yt-volume {
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: #ffffff;
+  height: 40px;
+}
+
+.bili-overlay .yt-volume button {
+  color: #ffffff;
+}
+
+.bili-overlay .yt-volume-slider {
+  width: 0;
+  opacity: 0;
+  transition: width 160ms ease, opacity 160ms ease;
+}
+
+.bili-overlay .yt-volume:hover .yt-volume-slider,
+.bili-overlay .yt-volume-slider:active {
+  width: 84px;
+  opacity: 1;
+}
+
+.bili-overlay .yt-volume-slider {
+  background: rgb(255 255 255 / 0.28);
+}
+
+.bili-overlay .yt-volume-level {
+  background: var(--bili-pink);
+}
+
+/* --- Bilibili's own pages beside its rail: 我的, 消息, 动态 ---------------------------------------------- */
+
+/* A section: its head over its list, and its own 刷新 in the corner. */
+.bili-section {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bili-section .yt-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 96px;
+}
+
+.bili-refresh {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #61666d;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.2);
+  display: grid;
+  place-items: center;
+  z-index: 4;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.bili-refresh svg {
+  width: 28px;
+  height: 28px;
+}
+
+.bili-refresh:hover {
+  color: var(--bili-pink);
+  background: #f4f5f6;
+}
+
+.bili-refresh:active {
+  transform: scale(0.94);
+}
+
+/* The head over a section's list: its title, the tabs beside it. */
+.bili-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 0 22px;
+}
+
+.bili-head-title {
+  flex: none;
+  font-size: calc(24px * var(--text-scale, 1));
+  font-weight: 700;
+  color: var(--bili-ink);
+}
+
+/* Its tabs: its own words, the one chosen in its pink. */
+.bili-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.bili-tab {
+  position: relative;
+  height: 56px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: #61666d;
+  font-size: calc(21px * var(--text-scale, 1));
+  font-weight: 500;
+}
+
+.bili-tab:hover {
+  background: var(--bili-hover);
+}
+
+.bili-tab.on {
+  background: var(--bili-pink-dim);
+  color: var(--bili-pink);
+  font-weight: 600;
+}
+
+.bili-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin: 0 0 0 6px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #fa5a57;
+  color: #ffffff;
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+/* --- 我的: the banner (their picture, name, level, coins and numbers), its tabs, its videos --------------- */
+.bili-me {
+  /* The banner over every column of the list under it (it's the scroll's header, not a card). */
+  grid-column: 1 / -1;
+  padding: 2px 0 18px;
+}
+
+.bili-me-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 104px;
+  padding: 18px 22px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(115deg, #dce8ff 0%, #edf3ff 42%, #ffe6ef 100%);
+}
+
+.bili-me-art {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 82% 12%, rgb(251 114 153 / 0.22) 0 86px, transparent 87px),
+    radial-gradient(circle at 8% 88%, rgb(0 174 236 / 0.16) 0 118px, transparent 119px);
+}
+
+.bili-me-face {
+  position: relative;
+  flex: none;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.8);
+}
+
+.bili-me-face.blank {
+  display: block;
+  background: #d9dee5;
+}
+
+.bili-me-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: #18191c;
+}
+
+.bili-me-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bili-me-name {
+  font-size: calc(20px * var(--text-scale, 1));
+  font-weight: 700;
+  color: #18191c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bili-me-level {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fb7299;
+  color: #ffffff;
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-me-vip {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #ffe3ea;
+  color: #d13f6c;
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-me-coins {
+  display: flex;
+  gap: 16px;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: #61666d;
+}
+
+.bili-me-numbers {
+  position: relative;
+  display: flex;
+  gap: 22px;
+  margin-left: auto;
+  color: #61666d;
+  font-size: calc(13px * var(--text-scale, 1));
+}
+
+.bili-me-numbers b {
+  margin-right: 3px;
+  color: #18191c;
+  font-size: calc(17px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
+.bili-me-space {
+  position: relative;
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgb(24 25 28 / 0.16);
+  border-radius: 15px;
+  background: rgb(255 255 255 / 0.6);
+  color: #18191c;
+  font-size: calc(13px * var(--text-scale, 1));
+}
+
+.bili-me-space:hover {
+  background: #ffffff;
+}
+
+.bili-me-error {
+  margin: 0 0 10px;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: #d13f6c;
+}
+
+/* --- 消息: its head, its tabs and a row per message ------------------------------------------------------ */
+.bili-msg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 10px;
+}
+
+.bili-msg-title {
+  font-size: calc(22px * var(--text-scale, 1));
+  font-weight: 700;
+  color: var(--bili-ink);
+}
+
+.bili-msg-gear {
+  display: inline-flex;
+  color: var(--bili-sub);
+}
+
+.bili-msg-gear svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bili-msg-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+}
+
+.bili-msg-row:hover {
+  background: var(--bili-hover);
+}
+
+.bili-msg-face {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e3e5e7;
+}
+
+.bili-msg-face.blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f2f3;
+  color: #9499a0;
+}
+
+.bili-msg-face.blank svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bili-msg-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bili-msg-name {
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 600;
+  color: var(--bili-ink);
+}
+
+.bili-msg-text {
+  font-size: calc(14px * var(--text-scale, 1));
+  color: var(--bili-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bili-msg-time {
+  flex: none;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+.bili-msg-unread {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: #fa5a57;
+  font-size: 0;
+  color: transparent;
+  overflow: hidden;
+}
+
+/* --- 动态: the UP 主s down the left, their cards in the flow --------------------------------------------- */
+.bili-dyn {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.bili-dyn-ups {
+  flex: none;
+  width: 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+}
+
+.bili-dyn-up {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: #61666d;
+}
+
+.bili-dyn-up:hover {
+  background: var(--bili-hover);
+}
+
+.bili-dyn-up.on {
+  background: var(--bili-pink-dim);
+  color: var(--bili-pink);
+}
+
+.bili-dyn-up-face,
+.bili-dyn-up-all {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e3e5e7;
+}
+
+.bili-dyn-up-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f2f3;
+  color: #61666d;
+}
+
+.bili-dyn-up-all svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bili-dyn-up-name {
+  max-width: 100%;
+  font-size: calc(12.5px * var(--text-scale, 1));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bili-dyn-up.on .bili-dyn-up-name {
+  font-weight: 600;
+}
+
+.bili-dyn-flow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bili-dyn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: var(--bili-card);
+  box-shadow: 0 0 0 1px var(--bili-line);
+}
+
+.bili-dyn-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bili-dyn-face {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e3e5e7;
+}
+
+.bili-dyn-who {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bili-dyn-name {
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 600;
+  color: var(--bili-ink);
+}
+
+.bili-dyn-meta {
+  font-size: calc(12.5px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+.bili-dyn-text {
+  margin: 0;
+  font-size: calc(15px * var(--text-scale, 1));
+  line-height: 1.6;
+  color: var(--bili-ink);
+  white-space: pre-wrap;
+}
+
+.bili-dyn-video {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.bili-dyn-video .yt-thumb {
+  flex: none;
+  width: 168px;
+}
+
+.bili-dyn-video-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bili-dyn-video-title {
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--bili-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bili-dyn-video-sub {
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+.bili-dyn-pictures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 520px;
+}
+
+.bili-dyn-pictures img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #e3e5e7;
+}
+
+.bili-dyn-actions {
+  display: flex;
+  gap: 26px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bili-line);
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--bili-sub);
+}
+
+/* The rail's own picture (its 我的 item): the player's face, as small as the icons. */
+.bili-rail-face {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e3e5e7;
+}
+
+/* The rail's tool lit, as the sections are. */
+.bili-rail-tool.on {
+  background: var(--bili-pink-dim);
+  color: var(--bili-pink);
+}
+
+/* Bilibili's night on the pages beside its rail. */
+.youtube-app.bilibili-app.bili-dark .bili-msg-face.blank,
+.youtube-app.bilibili-app.bili-dark .bili-dyn-up-all {
+  background: #23272e;
+  color: #c9ced4;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-tab {
+  color: #c9ced4;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-refresh {
+  background: #23272e;
+  color: #c9ced4;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.5);
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-tab.on {
+  background: var(--bili-pink-dim);
+  color: var(--bili-pink);
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-me-banner {
+  background: linear-gradient(115deg, #1e2530 0%, #212630 45%, #2a1e28 100%);
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-me-name,
+.youtube-app.bilibili-app.bili-dark .bili-me-numbers b {
+  color: #e7e9eb;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-me-coins,
+.youtube-app.bilibili-app.bili-dark .bili-me-numbers {
+  color: #8b9096;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-me-space {
+  border-color: #3a4048;
+  background: rgb(35 39 46 / 0.8);
+  color: #e7e9eb;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-dyn-card {
+  background: #1b1e23;
+  box-shadow: 0 0 0 1px #2b2f36;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-dyn-face,
+.youtube-app.bilibili-app.bili-dark .bili-dyn-up-face,
+.youtube-app.bilibili-app.bili-dark .bili-msg-face {
+  background: #23272e;
+}
+
+/* --- The details' texts, in the app's own ink (the page's, not YouTube's white) ------------------------- */
+
+.yt-bili-player .bili-up-name,
+.yt-bili-player .bili-video-title,
+.yt-bili-player .bili-parts-title,
+.yt-bili-player .bili-next-title,
+.yt-bili-player .bili-next-name,
+.yt-bili-player .bili-stats b {
+  color: var(--bili-ink);
+}
+
+.yt-bili-player .bili-up-note,
+.yt-bili-player .bili-desc,
+.yt-bili-player .bili-stats,
+.yt-bili-player .bili-next-sub {
+  color: var(--bili-sub);
+}
+
+.yt-bili-player .bili-time {
+  color: #61666d;
+}
+
+/* Its scroll box takes the room beside the picture, its own surface either way. */
+.yt-bili-scroll {
+  color: var(--bili-ink);
+}

@@ -302,6 +302,10 @@ const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
     ("generic", &["scania.s_2016", "scania.r_2016", "scania.s_2024e"]),
     // The game's toy GPS (Cabin Accessories), WestPlay's only on Oyuncuyusbis' coaches' Gps parts ([`OB_GPS_GLASS`]).
     ("ob-gps", &["setra516hd", "t16shd", "setradt531", "manlions"]),
+    // YTHQ Tablet's screen script for the Iveco S-Way is the MAN TGX 2020's too (`crates/setup`'s
+    // YTHQ patches: the truck's `computers*.sui` name YTHQ's script for both), so that screen is
+    // not WestPlay's own to take.
+    ("iveco-sway", &["iveco.sway"]),
 ];
 
 /// The buses' screens WestPlay is on (the Coaches DLC's own, the bus mods' Gps parts): in a bus the WestPlay tablet,

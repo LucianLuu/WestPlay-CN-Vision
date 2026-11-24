@@ -3,7 +3,11 @@ import {
   isInHost,
   type YouTubeAnswer,
   type YouTubeChannel,
+  type YouTubeDynamic,
+  type YouTubeMessage,
   type YouTubePlaylist,
+  type YouTubeProfile,
+  type YouTubeUnread,
   type YouTubeVideo,
 } from '../../../shared/host'
 import { SearchGlyph } from '../../keyboard/glyphs'
@@ -19,12 +23,14 @@ import {
   PersonGlyph,
   PlayGlyph,
   QueueGlyph,
+  RefreshGlyph,
 } from './glyphs'
 import {
   ask,
   clearSearches,
   clearWatched,
   command,
+  currentSite,
   forgetSearch,
   goBack,
   type KnownPlaylist,
@@ -36,7 +42,10 @@ import {
   type SearchFilter,
   rememberSearch,
   reopenPlayer,
+  setDark,
   setLanguage,
+  setPage,
+  setSection,
   signIn,
   signOut,
   stopVideo,
@@ -46,6 +55,8 @@ import {
 } from './youtube'
 import { VideoHole } from './VideoHole'
 import './youtube.css'
+// Bilibili's own surfaces over YouTube's page (the same components): loaded after, so it wins.
+import './bilibili.css'
 
 const FIELD = 'youtube-search'
 
@@ -61,6 +72,7 @@ export function YouTubeApp() {
   const views = useYouTube((store) => store.views)
   const [query, setQuery] = useState('')
   const typing = useKeyboard((state) => state.field?.id === FIELD)
+  const dark = useYouTube((store) => store.dark)
   const language = googleLanguage(useText().locale)
   useEffect(() => setLanguage(language), [language])
   // Left while watching: back to the video.
@@ -91,7 +103,14 @@ export function YouTubeApp() {
   }
 
   return (
-    <section className="app-panel youtube-app" aria-label={text.apps.youtube}>
+    <section
+      className={
+        currentSite() === 'bilibili'
+          ? `app-panel youtube-app bilibili-app${dark ? ' bili-dark' : ''}`
+          : 'app-panel youtube-app'
+      }
+      aria-label={text.apps.youtube}
+    >
       <div className="yt-top">
         {views.length > 0 && !typing && (
           <button type="button" className="yt-round" aria-label={text.youtube.back} onClick={back}>
@@ -111,6 +130,8 @@ export function YouTubeApp() {
         {!typing && <Account />}
       </div>
       {!typing && <SigningIn />}
+      {/* Bilibili's own rail down the left (YouTube has none): its pages, the one showing lit. */}
+      {currentSite() === 'bilibili' && <BilibiliRail />}
       {/* Layers, each kept as it is under the one over it (closing the search, or going back, finds the
           page under as it was, its list and its scroll): Home, the pages over it, suggestions. */}
       <div className="yt-body">
@@ -128,8 +149,124 @@ export function YouTubeApp() {
           </div>
         )}
       </div>
-      {!typing && <NowPlaying />}
+      {/* Bilibili's own page has no bar under it for the video playing: its player is the video's page, and
+          leaving it closes the video (its rail is the way back). */}
+      {!typing && currentSite() === 'youtube' && <NowPlaying />}
     </section>
+  )
+}
+
+/**
+ * Bilibili's own rail down the left of its page, as its own app's: 首页, 精选, 动态 and 我的, top to bottom,
+ * the one showing lit in its pink; under them its messages and the page's own night. Each is a real page
+ * (Bilibili's own interfaces answer them, `bilibili.js`). YouTube has no rail (its pages are chips across the
+ * top).
+ */
+function BilibiliRail() {
+  const section = useYouTube((store) => store.section)
+  const page = useYouTube((store) => store.page)
+  const dark = useYouTube((store) => store.dark)
+  const account = useYouTube((store) => store.account)
+  const items = [
+    {
+      id: 'home' as const,
+      label: '首页',
+      glyph: <path d="M3 10.5 12 3l9 7.5V21H3z" strokeLinejoin="round" />,
+    },
+    {
+      id: 'selected' as const,
+      label: '精选',
+      glyph: (
+        <path
+          d="M12 3.6 14.9 9l5.9.9-4.3 4.2 1 5.9L12 17.1 6.5 20l1-5.9L3.2 9.9 9.1 9z"
+          strokeLinejoin="round"
+        />
+      ),
+    },
+  ]
+  // A section is lit while it is what shows (no page over it).
+  const lit = (id: 'home' | 'selected') => page === null && section === id
+  return (
+    <nav className="bili-rail" aria-label="Bilibili">
+      <div className="bili-rail-top">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={lit(item.id) ? 'bili-rail-item on' : 'bili-rail-item'}
+            aria-pressed={lit(item.id)}
+            onClick={() => setSection(item.id)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9">
+              {item.glyph}
+            </svg>
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className={page === 'dynamics' ? 'bili-rail-item on' : 'bili-rail-item'}
+          aria-pressed={page === 'dynamics'}
+          onClick={() => setPage(page === 'dynamics' ? null : 'dynamics')}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <circle cx="12" cy="12" r="2.3" />
+            <path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6" strokeLinecap="round" />
+            <path d="M5.6 5.6a9.1 9.1 0 0 0 0 12.8M18.4 5.6a9.1 9.1 0 0 1 0 12.8" strokeLinecap="round" />
+          </svg>
+          <span>动态</span>
+        </button>
+        <button
+          type="button"
+          className={page === 'profile' ? 'bili-rail-item on' : 'bili-rail-item'}
+          aria-pressed={page === 'profile'}
+          onClick={() => setPage(page === 'profile' ? null : 'profile')}
+        >
+          {account?.avatar ? (
+            <img referrerPolicy="no-referrer" className="bili-rail-face" src={account.avatar} alt="" />
+          ) : (
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <circle cx="12" cy="8.2" r="3.4" />
+              <path d="M5 20a7 7 0 0 1 14 0" strokeLinejoin="round" />
+            </svg>
+          )}
+          <span>我的</span>
+        </button>
+      </div>
+      {/* Bilibili's own tools under the rail: the player's messages, the page's own night. */}
+      <div className="bili-rail-bottom">
+        <button
+          type="button"
+          className={page === 'messages' ? 'bili-rail-tool on' : 'bili-rail-tool'}
+          aria-label="消息"
+          aria-pressed={page === 'messages'}
+          onClick={() => setPage(page === 'messages' ? null : 'messages')}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+            <path d="m3.8 7 8.2 6 8.2-6" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="bili-rail-tool"
+          aria-label={dark ? '浅色模式' : '深色模式'}
+          aria-pressed={dark}
+          onClick={() => setDark(!dark)}
+        >
+          {dark ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <circle cx="12" cy="12" r="4.2" />
+              <path d="M12 2.6v2.2M12 19.2v2.2M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.4 19.6 6 18M18 6l1.6-1.6" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <path d="M20 13.4A8.2 8.2 0 0 1 10.6 4a8.4 8.4 0 1 0 9.4 9.4z" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </nav>
   )
 }
 
@@ -197,7 +334,7 @@ function Account() {
   return (
     <div className="yt-account">
       <button type="button" className="yt-me" aria-label={text.youtube.signOut} onClick={() => setMenu(!menu)}>
-        {account.avatar ? <img src={account.avatar} alt="" /> : <PersonGlyph />}
+        {account.avatar ? <img referrerPolicy="no-referrer" src={account.avatar} alt="" /> : <PersonGlyph />}
       </button>
       {menu && (
         <div className="yt-menu" role="menu">
@@ -229,10 +366,470 @@ function SigningIn() {
   ) : null
 }
 
-/** Home: signed in, YouTube's own; otherwise this PC's. */
+/** Home: signed in, YouTube's own; otherwise this PC's. Bilibili's own front page is the same recency feed
+ * signed in or not (its recommendations don't need an account), so it's always the signed-in Home there. */
 function Home({ onSearch }: { onSearch(query: string): void }) {
   const signedIn = useYouTube((store) => store.account?.signedIn ?? false)
+  if (currentSite() === 'bilibili') return <BilibiliHome />
   return signedIn ? <SignedInHome onSearch={onSearch} /> : <LocalHome onSearch={onSearch} />
+}
+
+/**
+ * Bilibili's own page beside its rail: the player's own (their numbers and their lists), their messages, their
+ * 动态, or the section's list (its front page, its selection, its ranking, its series).
+ */
+function BilibiliHome() {
+  const page = useYouTube((store) => store.page)
+  if (page === 'profile') return <BilibiliProfile />
+  if (page === 'messages') return <BilibiliMessages />
+  if (page === 'dynamics') return <BilibiliDynamics />
+  return <BilibiliSection />
+}
+
+/** The player's own page, as Bilibili's own shows it: the banner (their picture, name, level, coins and
+ * numbers), the tabs, and the tab's own videos (with when each was watched). */
+function BilibiliProfile() {
+  const account = useYouTube((store) => store.account)
+  const [profile, setProfile] = useState<YouTubeProfile | null>(null)
+  const [status, setStatus] = useState<'loading' | 'done' | 'failed'>('loading')
+  const [kind, setKind] = useState<'history' | 'favorites' | 'later'>('history')
+  useEffect(() => {
+    if (!account?.signedIn) {
+      setProfile(null)
+      setStatus('done')
+      return
+    }
+    let current = true
+    setStatus('loading')
+    ask({ action: 'profile' }).then((answer) => {
+      if (!current) return
+      setProfile(answer.failed ? null : (answer.profile ?? null))
+      setStatus(answer.failed ? 'failed' : 'done')
+    })
+    return () => {
+      current = false
+    }
+  }, [account?.signedIn])
+
+  if (!account?.signedIn) {
+    return (
+      <div className="yt-scroll">
+        <p className="yt-start">登录 Bilibili 后，这里是你自己的主页。</p>
+      </div>
+    )
+  }
+  const tabs = [
+    { id: 'history' as const, label: '历史记录' },
+    { id: 'favorites' as const, label: '我的收藏' },
+    { id: 'later' as const, label: '稍后再看' },
+  ]
+  const avatar = profile?.avatar ?? account.avatar ?? null
+  return (
+    <VideoList
+      key={kind}
+      layout="grid"
+      header={
+        <>
+          <div className="bili-me">
+            <div className="bili-me-banner">
+              <span className="bili-me-art" aria-hidden="true" />
+              {avatar ? (
+                <img referrerPolicy="no-referrer" className="bili-me-face" src={avatar} alt="" />
+              ) : (
+                <span className="bili-me-face blank" />
+              )}
+              <span className="bili-me-text">
+                <span className="bili-me-name-row">
+                  <span className="bili-me-name">{profile?.name || account.name || '我的'}</span>
+                  {profile && profile.level > 0 && <span className="bili-me-level">LV{profile.level}</span>}
+                  {profile?.vip && <span className="bili-me-vip">大会员</span>}
+                </span>
+                <span className="bili-me-coins">
+                  <span>B币 {profile?.bcoins || '0'}</span>
+                  <span>硬币 {profile?.coins || '0'}</span>
+                </span>
+              </span>
+              {profile && (
+                <span className="bili-me-numbers">
+                  <span>
+                    <b>{profile.videos}</b> 投稿
+                  </span>
+                  <span>
+                    <b>{profile.following}</b> 关注
+                  </span>
+                  <span>
+                    <b>{profile.followers}</b> 粉丝
+                  </span>
+                </span>
+              )}
+              {profile && (
+                <button
+                  type="button"
+                  className="bili-me-space"
+                  onClick={() =>
+                    openChannel({ channel: profile.mid, name: profile.name, avatar: profile.avatar })
+                  }
+                >
+                  空间 ›
+                </button>
+              )}
+            </div>
+            {status === 'failed' && <p className="bili-me-error">Bilibili 没有说清楚你的主页，下面的列表仍是它的。</p>}
+            <div className="bili-tabs">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={kind === tab.id ? 'bili-tab on' : 'bili-tab'}
+                  aria-pressed={kind === tab.id}
+                  onClick={() => setKind(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      }
+      question={(more) =>
+        more ? { action: 'library', kind, more } : { action: 'library', kind }
+      }
+    />
+  )
+}
+
+/** The player's messages: its own tabs (its chats, the replies, the @s, the likes), a row per message. */
+function BilibiliMessages() {
+  const account = useYouTube((store) => store.account)
+  const [kind, setKind] = useState<'chat' | 'reply' | 'at' | 'like'>('chat')
+  const [messages, setMessages] = useState<YouTubeMessage[]>([])
+  const [unread, setUnread] = useState<YouTubeUnread | null>(null)
+  const [status, setStatus] = useState<'loading' | 'done' | 'failed'>('loading')
+  const [tries, setTries] = useState(0)
+  useEffect(() => {
+    if (!account?.signedIn) {
+      setMessages([])
+      setStatus('done')
+      return
+    }
+    let current = true
+    setStatus('loading')
+    ask({ action: 'messages', kind }).then((answer) => {
+      if (!current) return
+      setMessages(answer.failed ? [] : (answer.messages ?? []))
+      setUnread(answer.failed ? null : (answer.unread ?? null))
+      setStatus(answer.failed ? 'failed' : 'done')
+    })
+    return () => {
+      current = false
+    }
+  }, [kind, account?.signedIn, tries])
+
+  if (!account?.signedIn) {
+    return (
+      <div className="yt-scroll">
+        <p className="yt-start">登录 Bilibili 后，这里是你收到的消息。</p>
+      </div>
+    )
+  }
+  const tabs = [
+    { id: 'chat' as const, label: '聊天列表', badge: 0 },
+    { id: 'reply' as const, label: '回复我的', badge: unread?.reply ?? 0 },
+    { id: 'at' as const, label: '@我的', badge: unread?.at ?? 0 },
+    { id: 'like' as const, label: '收到的赞', badge: unread?.like ?? 0 },
+  ]
+  // A summary row opens its own tab (the chat list's rows are Bilibili's four kinds).
+  const opens = (id: string) =>
+    id === '1' ? 'reply' : id === '2' ? 'at' : id === '3' ? 'like' : 'chat'
+  return (
+    <div className="yt-scroll bili-msg">
+      <div className="bili-msg-head">
+        <span className="bili-msg-title">消息</span>
+        <span className="bili-msg-gear" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <circle cx="12" cy="12" r="3.2" />
+            <path d="M12 3.4v2M12 18.6v2M3.4 12h2M18.6 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18" strokeLinecap="round" />
+          </svg>
+        </span>
+      </div>
+      <div className="bili-tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={kind === tab.id ? 'bili-tab on' : 'bili-tab'}
+            aria-pressed={kind === tab.id}
+            onClick={() => setKind(tab.id)}
+          >
+            {tab.label}
+            {tab.badge > 0 && <span className="bili-dot">{tab.badge > 99 ? '99+' : tab.badge}</span>}
+          </button>
+        ))}
+      </div>
+      {status === 'loading' && <p className="yt-note">正在读取…</p>}
+      {status === 'failed' && (
+        <p className="yt-note">
+          Bilibili 没有响应。{' '}
+          <button type="button" className="yt-chip" onClick={() => setTries(tries + 1)}>
+            重试
+          </button>
+        </p>
+      )}
+      {status === 'done' && messages.length === 0 && <p className="yt-note">这里还没有消息。</p>}
+      {messages.map((message) => (
+        <button
+          key={message.id}
+          type="button"
+          className="bili-msg-row"
+          onClick={() => {
+            if (message.kind === 'notice') setKind(opens(message.id))
+          }}
+        >
+          {message.avatar ? (
+            <img referrerPolicy="no-referrer" className="bili-msg-face" src={message.avatar} alt="" />
+          ) : (
+            <span className="bili-msg-face blank" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+                <path d="m3.8 7 8.2 6 8.2-6" strokeLinejoin="round" />
+              </svg>
+            </span>
+          )}
+          <span className="bili-msg-body">
+            <span className="bili-msg-name">{message.name}</span>
+            <span className="bili-msg-text">{message.text}</span>
+          </span>
+          <span className="bili-msg-time">{message.time}</span>
+          {message.unread && <span className="bili-msg-unread">未读</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The player's 动态: the UP 主s they follow down the left, their cards in the flow (all of them, or the
+ * videos only), a page more as the flow nears its end. */
+function BilibiliDynamics() {
+  const account = useYouTube((store) => store.account)
+  const [video, setVideo] = useState(false)
+  const [cards, setCards] = useState<YouTubeDynamic[]>([])
+  const [more, setMore] = useState<string | null>(null)
+  const [status, setStatus] = useState<'loading' | 'done' | 'failed'>('loading')
+  const asking = useRef(false)
+  const load = useCallback(
+    (next: string | null) => {
+      if (asking.current) return
+      asking.current = true
+      if (!next) setStatus('loading')
+      const question: Question = next
+        ? { action: 'dynamics', video, more: next }
+        : { action: 'dynamics', video }
+      ask(question).then((answer) => {
+        asking.current = false
+        if (answer.failed) {
+          setStatus('failed')
+          return
+        }
+        setCards((before) => {
+          const seen = new Set(before.map((card) => card.id))
+          return [...before, ...(answer.dynamics ?? []).filter((card) => !seen.has(card.id))]
+        })
+        setMore(answer.more ?? null)
+        setStatus('done')
+      })
+    },
+    [video],
+  )
+  useEffect(() => {
+    setCards([])
+    setMore(null)
+    load(null)
+  }, [load])
+
+  if (!account?.signedIn) {
+    return (
+      <div className="yt-scroll">
+        <p className="yt-start">登录 Bilibili 后，这里是你关注的 UP 主的动态。</p>
+      </div>
+    )
+  }
+  // The UP 主s the cards are from, top to bottom: their own column down the left, each opening their page.
+  const ups: { id: string; name: string; avatar: string | null }[] = []
+  for (const card of cards) {
+    if (!card.channelId || ups.some((up) => up.id === card.channelId)) continue
+    ups.push({ id: card.channelId, name: card.author, avatar: card.avatar })
+    if (ups.length >= 12) break
+  }
+  return (
+    <div
+      className="yt-scroll bili-dyn"
+      onScroll={(event) => {
+        const element = event.currentTarget
+        if (more && status === 'done' && element.scrollTop + element.clientHeight > element.scrollHeight - element.clientHeight * 0.8) {
+          load(more)
+        }
+      }}
+    >
+      <aside className="bili-dyn-ups">
+        <button type="button" className="bili-dyn-up on">
+          <span className="bili-dyn-up-all" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <path d="M4 7h16M4 12h16M4 17h10" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="bili-dyn-up-name">全部动态</span>
+        </button>
+        {ups.map((up) => (
+          <button
+            key={up.id}
+            type="button"
+            className="bili-dyn-up"
+            onClick={() => openChannel({ channel: up.id, name: up.name, avatar: up.avatar })}
+          >
+            {up.avatar ? (
+              <img referrerPolicy="no-referrer" className="bili-dyn-up-face" src={up.avatar} alt="" />
+            ) : (
+              <span className="bili-dyn-up-face blank" />
+            )}
+            <span className="bili-dyn-up-name">{up.name}</span>
+          </button>
+        ))}
+      </aside>
+      <div className="bili-dyn-flow">
+        <div className="bili-tabs">
+          <button type="button" className={!video ? 'bili-tab on' : 'bili-tab'} aria-pressed={!video} onClick={() => setVideo(false)}>
+            综合
+          </button>
+          <button type="button" className={video ? 'bili-tab on' : 'bili-tab'} aria-pressed={video} onClick={() => setVideo(true)}>
+            视频
+          </button>
+        </div>
+        {cards.map((card) => (
+          <BilibiliDynamicCard key={card.id} card={card} />
+        ))}
+        {status === 'loading' && <p className="yt-note">正在读取…</p>}
+        {status === 'failed' && (
+          <p className="yt-note">
+            Bilibili 没有响应。{' '}
+            <button type="button" className="yt-chip" onClick={() => load(null)}>
+              重试
+            </button>
+          </p>
+        )}
+        {status === 'done' && cards.length === 0 && <p className="yt-note">关注的 UP 主还没有新动态。</p>}
+      </div>
+    </div>
+  )
+}
+
+/** One of the player's 动态: who, when and what, its words, its video or pictures, and its numbers. */
+function BilibiliDynamicCard({ card }: { card: YouTubeDynamic }) {
+  const counts = [card.forwards, card.comments, card.likes].filter(Boolean)
+  const labels = ['转发', '评论', '点赞']
+  return (
+    <article className="bili-dyn-card">
+      <header className="bili-dyn-head">
+        {card.avatar ? (
+          <img referrerPolicy="no-referrer" className="bili-dyn-face" src={card.avatar} alt="" />
+        ) : (
+          <span className="bili-dyn-face blank" />
+        )}
+        <span className="bili-dyn-who">
+          <span className="bili-dyn-name">{card.author}</span>
+          <span className="bili-dyn-meta">{[card.time, card.action].filter(Boolean).join(' · ')}</span>
+        </span>
+      </header>
+      {card.text && <p className="bili-dyn-text">{card.text}</p>}
+      {card.video && (
+        <button type="button" className="bili-dyn-video" onClick={() => play(card.video as YouTubeVideo)}>
+          <Thumbnail video={card.video} />
+          <span className="bili-dyn-video-text">
+            <span className="bili-dyn-video-title">{card.video.title}</span>
+            <span className="bili-dyn-video-sub">
+              {[card.video.views, card.video.duration].filter(Boolean).join(' · ')}
+            </span>
+          </span>
+        </button>
+      )}
+      {card.pictures.length > 0 && (
+        <div className="bili-dyn-pictures">
+          {card.pictures.map((picture) => (
+            <img key={picture} referrerPolicy="no-referrer" src={picture} alt="" loading="lazy" />
+          ))}
+        </div>
+      )}
+      <footer className="bili-dyn-actions">
+        {counts.length === 0
+          ? labels.map((label) => (
+              <span key={label}>{label}</span>
+            ))
+          : counts.map((count, index) => (
+              <span key={labels[index]}>
+                {count} {labels[index]}
+              </span>
+            ))}
+      </footer>
+    </article>
+  )
+}
+
+/** Bilibili's own section (its rail's): its front page's feed, its selection, its ranking, its bangumi or its
+ * films, with the tabs of the ones beside it. */
+function BilibiliSection() {
+  const section = useYouTube((store) => store.section)
+  // A press of 刷新 asks the section's own list again (a new list: its `key`).
+  const [round, setRound] = useState(0)
+  // The rail's own lists, Bilibili's titles for them.
+  const titles: Record<typeof section, string> = {
+    home: '推荐',
+    selected: '精选',
+    ranking: '热门',
+    bangumi: '追番',
+    film: '影视',
+    live: '直播',
+  }
+  const tabs = [
+    { id: 'home' as const, label: '推荐' },
+    { id: 'ranking' as const, label: '热门' },
+    { id: 'bangumi' as const, label: '追番' },
+    { id: 'film' as const, label: '影视' },
+    { id: 'live' as const, label: '直播' },
+  ]
+  return (
+    <div className="bili-section">
+      <div className="bili-head">
+        <span className="bili-head-title">{titles[section]}</span>
+        <div className="bili-tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={section === tab.id ? 'bili-tab on' : 'bili-tab'}
+              aria-pressed={section === tab.id}
+              onClick={() => setSection(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <VideoList
+        key={`${section}:${round}`}
+        layout="grid"
+        question={(more) => (more ? { action: 'feed', which: section, more } : { action: 'feed', which: section })}
+      />
+      {/* Its own 刷新, in the corner of the list. */}
+      <button
+        type="button"
+        className="bili-refresh"
+        aria-label="刷新"
+        title="刷新"
+        onClick={() => setRound(round + 1)}
+      >
+        <RefreshGlyph />
+      </button>
+    </div>
+  )
 }
 
 /** A signed-in player's Home: YouTube's recommendations, or (a chip away) their Subscriptions, as cards two
@@ -240,10 +837,11 @@ function Home({ onSearch }: { onSearch(query: string): void }) {
 function SignedInHome({ onSearch }: { onSearch(query: string): void }) {
   const text = useText()
   const [feed, setFeed] = useState<'home' | 'subscriptions'>('home')
+  const bilibili = currentSite() === 'bilibili'
   return (
     <>
       <div className="yt-chips">
-        {(['home', 'subscriptions'] as const).map((which) => (
+        {(bilibili ? (['home'] as const) : (['home', 'subscriptions'] as const)).map((which) => (
           <button
             key={which}
             type="button"
@@ -649,6 +1247,10 @@ function VideoList({
   // The list asks with the question it started with (a new question is a new list: its `key`).
   const asked = useRef({ question, onAnswer })
   const asking = useRef(false)
+  // A failed ask on Bilibili's own lists is asked again by itself, twice (its interfaces answer slowly now and
+  // then, a first one a moment after opening the page failing): the player then sees it come up, not a retry
+  // button. YouTube's own asks stay as they are (its failure is YouTube's to report).
+  const tries = useRef(0)
   const load = useCallback((next: string | null) => {
     if (asking.current) return
     asking.current = true
@@ -656,9 +1258,15 @@ function VideoList({
     ask(asked.current.question(next)).then((answer: YouTubeAnswer) => {
       asking.current = false
       if (answer.failed) {
+        if (currentSite() === 'bilibili' && tries.current < 2) {
+          tries.current++
+          setTimeout(() => load(next), 700)
+          return
+        }
         setStatus('failed')
         return
       }
+      tries.current = 0
       asked.current.onAnswer?.(answer)
       setList((before) => {
         // YouTube can list a video twice across pages.
@@ -744,7 +1352,7 @@ function VideoList({
       )}
       {status === 'failed' && (
         <p className="yt-note">
-          {text.youtube.failed}{' '}
+          {currentSite() === 'bilibili' ? 'Bilibili 没有响应。' : text.youtube.failed}{' '}
           <button type="button" className="yt-chip" onClick={() => load(videos.length ? more : null)}>
             {text.youtube.tryAgain}
           </button>
@@ -836,7 +1444,7 @@ export function Thumbnail({ video, progress = 0 }: { video: YouTubeVideo; progre
   const text = useText()
   return (
     <span className="yt-thumb">
-      {video.thumbnail ? <img src={video.thumbnail} alt="" loading="lazy" /> : <span className="yt-thumb-blank" />}
+      {video.thumbnail ? <img referrerPolicy="no-referrer" src={video.thumbnail} alt="" loading="lazy" /> : <span className="yt-thumb-blank" />}
       {video.live ? (
         <span className="yt-badge live">{text.youtube.live}</span>
       ) : (

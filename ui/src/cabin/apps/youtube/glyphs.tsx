@@ -54,6 +54,35 @@ export function BackGlyph() {
   )
 }
 
+export function ForwardGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="m9 5 7 7-7 7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function HomeGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M4 10.6 12 4l8 6.6V20h-6v-5.6h-4V20H4z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function PlayGlyph() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -135,6 +164,48 @@ export function PersonGlyph() {
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <circle cx="12" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="M6.5 18a6.5 6.5 0 0 1 11 0" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
+/** Bilibili's 弹幕: its "弹" in a rounded box. */
+export function DanmakuGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2.5" y="4.5" width="19" height="15" rx="3.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <text x="12" y="15.6" textAnchor="middle" fontSize="10.5" fontWeight="700" fill="currentColor">
+        弹
+      </text>
+    </svg>
+  )
+}
+
+/** Bilibili's 弹幕设置: the same box, a gear at its corner. */
+export function DanmakuSetupGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2.5" y="4.5" width="19" height="15" rx="3.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <text x="11" y="15.4" textAnchor="middle" fontSize="10" fontWeight="700" fill="currentColor">
+        弹
+      </text>
+      <circle cx="19" cy="18.4" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M19 15.2v1.2M19 20.4v1.2M15.8 18.4h1.2M20.9 18.4h1.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 刷新: the arrow going round (Bilibili's own list's corner). */
+export function RefreshGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 4v4.5h-4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

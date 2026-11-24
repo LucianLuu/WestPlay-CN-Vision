@@ -162,6 +162,7 @@ export type HostMessage =
       /** Whether the screen gives up some of its effects to run lighter, chosen in Settings › Display &
        * Performance (`westplay_host::settings::ScreenSettings::performance_mode`). An older host sends none,
        * meaning off. */
+      performanceMode?: boolean
       /** The truck's own speakers, placed in its cab (Settings › Sound), or not: its sound plays as it is. */
       spatial?: boolean
     }
@@ -274,7 +275,7 @@ export type HostMessage =
    * and none when there are none to tell. */
   | { type: 'nearby'; server: number | null; local: number | null; players: [number, number, number, number][] }
   /** Whether YouTube is signed in, and the picture to show for the player: nothing else of the account. */
-  | { type: 'youtubeAccount'; signedIn: boolean; avatar: string | null }
+  | { type: 'youtubeAccount'; signedIn: boolean; avatar: string | null; name?: string; mid?: string | null }
   /** Whether Google's sign-in window is open on the PC's desktop. */
   | { type: 'youtubeSignIn'; open: boolean }
   /** The map the cab shows: its folder in WestPlay's maps (served at `https://westplay.maps/`), and when it
@@ -351,6 +352,11 @@ export type HostMessage =
   | { type: 'safariNoDownload'; tab: number }
   /** Whether any of Safari's pages plays sound. */
   | { type: 'safariPlaying'; playing: boolean }
+  /** The hidden NetEase player's answer to a question its page's layer asked (
+eteaseCommand's sk): the
+   * question's own name carries the payload ({type:'neteaseAnswer', id, account:{…}}); ailed when it had
+   * none. */
+  | { type: 'neteaseAnswer'; id: number; failed?: boolean }
   /** The web app's page's own field: whether one has the focus, the text it holds, and which selection it is (a
    * number that changes each time one takes the focus). */
   | { type: 'webAppTyping'; on: boolean; text: string; selection: number }
@@ -370,6 +376,7 @@ export type HostMessage =
 /** The game's weather: the one there is and the one it's turning to (the same once it has); in game minutes,
  * how long until the game changes it next; and how wet the roads are, percent. Each of the last two `null`
  * (or missing, from an older host) when the host can't read it. */
+
 export interface GameWeather {
   now: Sky
   coming: Sky
@@ -449,6 +456,9 @@ export type PageMessage =
   | { type: 'typing'; selection: number }
   /** A command for YouTube's player, or a question for YouTube (answered with `youtubeAnswer`). */
   | { type: 'youtube'; command: YouTubeCommand }
+  /** A command for Bilibili's player, or a question for it (answered with `youtubeAnswer`: the same app draws
+   * both, and Bilibili answers YouTube's shapes). */
+  | { type: 'bilibili'; command: YouTubeCommand }
   /** A command for Spotify's web player (`westplay_host::spotify::Command`): `show` places it, in the frame's
    * pixels, where the Spotify app cuts the page open. */
   | { type: 'spotify'; command: SpotifyCommand }
@@ -463,6 +473,11 @@ export type PageMessage =
   /** A command for QQ Music's own player. */
   | { type: 'qqMusic'; command: QqMusicCommand }
 
+  /** A command for NetEase Cloud Music's hidden player (westplay_host::netease::Command): start it, sign
+   * out, or a question its page's layer asks (sk), answered in 
+eteaseAnswer with the same id. */
+  | { type: 'neteaseCommand'; command: NeteaseCommand }
+
   /** The page asks for NetEase Cloud Music's layer: its port, or `null` when it isn't running. */
   | { type: 'neteasePort' }
   /** The page asks the layer to forget its account (the layer itself is told over the loopback). */
@@ -470,6 +485,7 @@ export type PageMessage =
   | { type: 'safari'; command: SafariCommand }
   | { type: 'refreshRate'; rate: '60' | '30' }
   | { type: 'trafficLights'; on: boolean }
+  | { type: 'performanceMode'; on: boolean }
   | { type: 'spatial'; on: boolean }
 
   /** A Safari tab's page (`westplay_host::safari::TabState`): its address and title, whether it loads, whether it
@@ -478,6 +494,7 @@ export type PageMessage =
   | { type: 'ime'; on: boolean }
   | { type: 'log'; text: string }
   | { type: 'webApp'; command: WebAppCommand }
+
 export interface SafariTabState {
   url: string
   title: string
@@ -845,6 +862,7 @@ export interface AppleMusicCollection {
   genre: string
   year: number | null
   tracks: AppleMusicTrack[]
+
   /** Favoured playlists shown on the account's "Mine" page (QQ Music's own). */
   playlists: AppleMusicItem[]
 }
@@ -928,10 +946,11 @@ export interface AppleMusicPlayback {
   repeat: AppleMusicRepeat
   /** The page's player's volume, 0 to 1. */
   volume: number | null
+  next: AppleMusicTrack[]
+
   /** The player's own choice of it: a fade may lower `volume`, this one only the player sets (the
    * host keeps it for the next start). */
   chosen?: number
-  next: AppleMusicTrack[]
 }
 
 /** What the YouTube Music app asks of YouTube Music's web player (`westplay_host::youtube_music::Command`), run
@@ -1144,7 +1163,7 @@ export interface YouTubeMusicPlayback {
 /** What the YouTube app asks of YouTube's player (hidden, under the page) or of YouTube (`westplay_host::
  * youtube::Command`). `show` places the video, in the frame's pixels. */
 export type YouTubeCommand =
-  | { action: 'load'; video: string; start?: number }
+  | { action: 'load'; video: string; start?: number; part?: number }
   | { action: 'play' }
   | { action: 'pause' }
   | { action: 'seek'; seconds: number }
@@ -1152,6 +1171,7 @@ export type YouTubeCommand =
   | { action: 'captions'; track: string | null }
   | { action: 'quality'; quality: string }
   | { action: 'rate'; rate: number }
+  | { action: 'detail'; id: number; video: string }
   | { action: 'audioTrack'; id: string }
   | { action: 'stableVolume'; on: boolean }
   | { action: 'voiceBoost'; on: boolean }
@@ -1165,7 +1185,14 @@ export type YouTubeCommand =
   | { action: 'subscribe'; id: number; channel: string; on: boolean }
   | { action: 'suggest'; id: number; query: string }
   | { action: 'related'; id: number; video: string }
-  | { action: 'feed'; id: number; which: 'home' | 'subscriptions'; more?: string }
+  | { action: 'feed'; id: number; which: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'subscriptions' | 'live'; more?: string }
+  | { action: 'profile'; id: number }
+  | { action: 'dynamics'; id: number; video?: boolean; more?: string }
+  | { action: 'messages'; id: number; kind: 'chat' | 'reply' | 'at' | 'like' }
+  | { action: 'library'; id: number; kind: 'history' | 'later' | 'favorites'; more?: string }
+  | { action: 'comments'; id: number; video: string; sort?: 'hot' | 'new'; more?: string }
+  | { action: 'danmaku'; id: number; video: string; part?: number }
+  | { action: 'sendDanmaku'; id: number; video: string; text: string; at: number; part?: number }
   | { action: 'signIn' }
   | { action: 'signOut' }
 
@@ -1215,6 +1242,8 @@ export interface YouTubeVideo {
   live: boolean
   /** Its channel's id, to open the channel (absent: not known). */
   channelId?: string
+  /** When it was watched or kept ("今天 15:19"), on the player's own lists. */
+  at?: string
 }
 
 /** A channel; its texts are YouTube's ("@LofiGirl", "15.8M subscribers", "468 videos"). */
@@ -1254,7 +1283,126 @@ export interface YouTubeAnswer {
   /** Playlists a search found; the playlist a playlist's page is. */
   playlists?: YouTubePlaylist[]
   playlist?: YouTubePlaylist | null
+  /** A video's own page (Bilibili's): its uploader, its numbers, and the parts a series is played in. */
+  detail?: YouTubeDetail | null
+  /** The signed-in player's own page (Bilibili's 我的): their level, coins and numbers. */
+  profile?: YouTubeProfile | null
+  /** The player's 动态: the cards of the feed of the UP 主s they follow. */
+  dynamics?: YouTubeDynamic[]
+  /** The player's messages (the rows of the tab asked for), and how many of each kind are unread. */
+  messages?: YouTubeMessage[]
+  unread?: YouTubeUnread
+  /** A video's comments (its 评论区): the page of them asked for. */
+  comments?: YouTubeComment[]
+  /** A video's danmaku: the lines that scroll over its picture, each with when it comes. */
+  danmaku?: YouTubeDanmaku[]
+  /** Whether Bilibili took the line of danmaku the page sent. */
+  sent?: boolean
   failed?: boolean
+}
+
+/** One line of a video's danmaku: when it comes (seconds into the video), what it says, its colour. */
+export interface YouTubeDanmaku {
+  at: number
+  text: string
+  color: string | null
+}
+
+/** One comment of a video's 评论区. */
+export interface YouTubeComment {
+  id: string
+  name: string
+  avatar: string | null
+  /** "3小时前" */
+  time: string
+  text: string
+  /** "8", "1.2万" */
+  likes: string
+  /** How many replies it has under it. */
+  replies: number
+}
+
+/** The signed-in player's own page: who they are, their level and membership, their coins, and their numbers. */
+export interface YouTubeProfile {
+  mid: string
+  name: string
+  avatar: string | null
+  /** 0 to 6, as Bilibili's badge shows it. */
+  level: number
+  /** Whether they're a 大会员. */
+  vip: boolean
+  /** "880.6" */
+  coins: string
+  /** "0.34" */
+  bcoins: string
+  sign: string
+  videos: number
+  following: number
+  followers: number
+}
+
+/** One card of the player's 动态: who put it up and when, what they did, its words and its video or pictures. */
+export interface YouTubeDynamic {
+  id: string
+  author: string
+  avatar: string | null
+  channelId?: string | null
+  /** "刚刚", "5分钟前" */
+  time: string
+  /** "投稿了视频", "发布了动态" */
+  action: string
+  text: string
+  video?: YouTubeVideo | null
+  pictures: string[]
+  forwards: string
+  comments: string
+  likes: string
+}
+
+/** One row of the player's messages. */
+export interface YouTubeMessage {
+  id: string
+  kind: 'reply' | 'at' | 'like' | 'notice'
+  name: string
+  avatar: string | null
+  time: string
+  text: string
+  unread: boolean
+}
+
+/** How many of the player's messages are unread, by kind. */
+export interface YouTubeUnread {
+  reply: number
+  at: number
+  like: number
+  notice: number
+}
+
+/** A video's own page, as Bilibili's player and the details beside it show it. */
+export interface YouTubeDetail {
+  video: string
+  title: string
+  desc: string
+  channel: string
+  channelId?: string | null
+  avatar?: string | null
+  pubdate: string
+  views: string
+  likes: string
+  coins: string
+  favorites: string
+  danmaku: string
+  /** Its parts: a one-part video is a list of one; a series has each of its own. */
+  parts: YouTubePart[]
+}
+
+/** One part of a video (a series' own episode): its number, its `cid` (what the page plays), its title and
+ * length. */
+export interface YouTubePart {
+  page: number
+  cid: number
+  title: string
+  duration: string
 }
 
 /** Text typed, or a key with a meaning of its own. */
@@ -1297,8 +1445,7 @@ declare global {
 
 /** The cabin page as a live demo in the companion's onboarding (`cabin.html?demo`): never the host's page,
  * even inside a WebView2 (the companion's own). See cabin/demo.ts. */
-export const IS_DEMO =
-  typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')
+export const IS_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')
 
 /** Whether the page runs inside the WestPlay host (and not in a plain browser preview, nor as the demo). */
 export function isInHost(): boolean {
@@ -1357,9 +1504,6 @@ export interface TrailerInfo {
   bodyType: string
 }
 
-/** What a keybind does: the music's volume a step up or down, or it paused or played on; or, a volume key held
- * (two seconds: owner 2026-11-03), the next song or the one before (or the song's start, past its first seconds). */
-
 /** A streaming site the web app shows (`westplay_host::webapp::Site`). */
 export type WebAppSite = 'bilibili' | 'qqMusic' | 'netease' | 'douyin' | 'kugou'
 
@@ -1382,9 +1526,6 @@ export interface WebAppState {
 
 /** What the web app's page plays, as the site tells the system (its Media Session) and the page's own lyrics
  * say (`westplay_host::webapp::Media`). */
-
-/** What the web app's page plays, as the site tells the system (its Media Session) and the page's own lyrics
- * say (`westplay_host::webapp::Media`). */
 export interface WebAppMedia {
   title: string
   artist: string
@@ -1394,10 +1535,6 @@ export interface WebAppMedia {
   /** The line of the song's words it's at (`null`: the page has none). */
   lyric: string | null
 }
-
-/** A song of the game's music folder (`westplay_host::music_folder::Song`): its file's name, and what its tags
- * say (none on a file without them): title, artist, length (seconds; 0: not known), cover (a file at
- * `https://westplay.music-covers/`). */
 
 /** What the WebApp app asks of its site's page (`westplay_host::webapp::Command`): the site to open, where the
  * page shows (the frame's pixels, under the page), and what it does. */
@@ -1430,14 +1567,13 @@ export type WebAppCommand =
  * WebAppScreen.tsx). */
 
 /** The bits of `Telemetry.engineKnown`: which engine, consumable and distance channels the game answered. */
+
 export const ENGINE = {
   air: 1 << 0,
   adblue: 1 << 1,
   water: 1 << 2,
   odometer: 1 << 3,
 } as const
-
-/** The bits of `Telemetry.wearKnown`: which wear and damage channels the game answered (the host's `WEAR_*`). */
 
 /** The bits of `Telemetry.wearKnown`: which wear and damage channels the game answered (the host's `WEAR_*`). */
 export const WEAR = {
@@ -1450,11 +1586,6 @@ export const WEAR = {
   trailerWheels: 1 << 6,
   cargo: 1 << 7,
 } as const
-
-/** The time the cab's clock shows (minutes since day 0, 00:00): the game's, or in a Convoy session the
- * session's, shifted by `shift` minutes, the time zone where the truck is with the profile's time zones on
- * (the cab's `clockShift`, cabin/state/timeZone.ts: an hour on in Finland, an hour back in the UK).
- * Everything shown as a time goes by it; whether a job is late, by `gameTime`. */
 
 /** Writes a line into the host's log (`app.log`), from the cabin page: nothing happens in a plain browser, or
  * where there's no window at all (a test). */
@@ -1472,7 +1603,6 @@ export type QqMusicQuestion =
   | { ask: 'search'; query: string }
   | { ask: 'collection'; id: string; kind?: AppleMusicItem['kind']; name?: string; by?: string; image?: string | null }
   | { ask: 'lyrics'; id: string }
-
 export interface QqMusicAnswers {
   home: AppleMusicPage
   top: AppleMusicPage
@@ -1506,6 +1636,7 @@ export type QqMusicCommand =
   | { action: 'signIn' }
 
 /** What the Radio app asks of live radio's web player (`westplay_host::radio::Command`). */
+
 export type RadioCommand =
   | { action: 'play'; track?: RadioTrack; requestId?: number }
   | { action: 'pause'; requestId?: number }
@@ -1561,4 +1692,26 @@ export interface CabHead {
   z: number
   heading: number
   pitch: number
+}
+/** A command for NetEase Cloud Music's hidden player (`crates/host/src/netease.rs`): start it (the page's layer
+ * does on its first use), sign its account out, or a question its page's layer asks (`ask`), answered in
+ * `neteaseAnswer` with the same `id`. */
+export type NeteaseCommand =
+  | { action: 'start' }
+  | { action: 'signOut' }
+  | { action: 'ask'; id: number; question: NeteaseQuestion }
+  | { action: 'playPause' }
+  | { action: 'next' }
+  | { action: 'previous' }
+  | { action: 'seek'; at: number }
+  | { action: 'favorite'; id: number; on: boolean }
+  | { action: 'signIn' }
+
+/** A question the NetEase app's layer asks its hidden player (`apps/netease/layer.ts`): `ask` names what is
+ * wanted, and the rest is that question's own (`search`'s `query`, `lyric`'s `id`). */
+export interface NeteaseQuestion {
+  ask: string
+  id?: number
+  query?: string
+  [more: string]: unknown
 }

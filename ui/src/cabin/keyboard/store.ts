@@ -87,10 +87,7 @@ export const useKeyboard = create<KeyboardStore>()((set, get) => {
 
   const tellHost = () => {
     const { field, keys } = get()
-    // 车机自己的输入框（Apple Music、网易云、QQ、电台、车辆…）不带 `playerTypes`，
-    // 那是「玩家的键盘自己往里打」才有的标记；只有它明确是 `true` 时才不用输入法。
-    // 只认 `=== false` 的话，中文输入法在这些框里永远不会出现（owner 2026-11-23）。
-    const ime = keys.language === 'zh' && field != null && field.playerTypes !== true
+    const ime = keys.language === 'zh' && field?.playerTypes === false
     if (ime !== toldHost) {
       toldHost = ime
       // Nothing to tell outside the host (a browser preview, the demo, a test).
@@ -262,11 +259,11 @@ export const useKeyboard = create<KeyboardStore>()((set, get) => {
     },
     attach: (field, language) => {
       const { field: current, chosen } = get()
-      // A newly selected field starts on the letters, in the player's language (or the one they switched to);
-      // one selected again keeps the keyboard as it was. Either way it's a new selection, which the player's
-      // own keyboard may type into.
+      // A newly selected field starts on the letters, in the player's language (or English, if they switched to
+      // it); one selected again keeps the keyboard as it was. Either way it's a new selection, which the
+      // player's own keyboard may type into.
       const selection = ++selections
-      const start = chosen ?? language
+      const start = chosen === 'zh' || chosen === 'en' || chosen === language ? chosen : language
       if (current?.id === field.id) set({ field, selection })
       else set({ field, selection, keys: initialKeyboard(start, language), composing: '', page: 0 })
       tellHost()
@@ -330,7 +327,7 @@ export const useKeyboard = create<KeyboardStore>()((set, get) => {
           break
         case 'enter':
           // The composition goes in first (the first candidate of the page shown), then the key does what it
-          // always does (search, go there, finish).
+          // always did (search, go there, finish).
           if (chinese && get().composing) choose(get().page * CANDIDATES_PER_PAGE)
           get().press({ kind: 'return' })
           break
