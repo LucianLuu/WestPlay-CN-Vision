@@ -299,7 +299,7 @@ const PORTS: &[u16] = &[PORT, 18080, 18081, 18082, 18083, 8080];
 fn free_port() -> (u16, Option<String>) {
     let holder = holder_of(PORT);
     for &port in PORTS {
-        if !port_open_on(port) {
+        if !port_taken(port) {
             let why = if port == PORT {
                 None
             } else {
@@ -370,15 +370,30 @@ fn http_get(port: u16, path: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&body).to_string())
 }
 
-/// Whether anything answers on `port`.
-fn port_open_on(port: u16) -> bool {
+/// Whether `port` is unusable: something answers on it, or it cannot be bound at all.
+///
+/// Answering is not the whole story. A port can be held without answering — Windows lets a
+/// process keep a socket with no listener on it, and some do: the OEM control panel's
+/// `GCUService.exe` (a Mechrevo laptop's, 2026-11-24) sat on 8787 with a bound socket that
+/// never answered, so `connect` timed out and the port read as free. The layer was then told
+/// to answer on it, failed to bind (`errno 13`, permission denied — the socket was someone
+/// else's), and gave up after twenty seconds with QQ Music showing nothing.
+///
+/// So a port is free only if it can actually be bound. `bind` alone would not do either: a
+/// WestPlay already answering on it holds the socket, and binding that one fails too, which
+/// is the same answer we want.
+fn port_taken(port: u16) -> bool {
     let address = SocketAddr::from(([127, 0, 0, 1], port));
-    TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok()
+    if TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok() {
+        return true;
+    }
+    // Nothing answers; it is still no good if it cannot be taken. Closed at once: this only
+    // asks whether the bind would work.
+    std::net::TcpListener::bind(address).is_err()
 }
 
 fn port_open() -> bool {
-    let address = SocketAddr::from(([127, 0, 0, 1], PORT));
-    TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok()
+    port_taken(PORT)
 }
 
 /// Windows' flag for a process with no console window of its own.
@@ -419,5 +434,25 @@ mod tests {
     fn a_folder_without_a_layer_starts_nothing() {
         let missing = Path::new("no-such-folder");
         assert!(Layer::start(missing).is_none());
+    }
+
+    /// A port held without a listener is taken, not free.
+    ///
+    /// This is what went wrong with a Mechrevo laptop's OEM control panel on 8787 (2026-11-24):
+    /// it kept a socket bound and never listened, so answering-and-nothing-answering both said
+    /// "free" and the layer was told to answer there — which it could not, and QQ Music showed
+    /// nothing. A listener that is held here, and one that is not, are the two cases to tell
+    /// apart.
+    #[test]
+    fn a_port_held_without_a_listener_is_taken() {
+        // A socket bound and never listened on: `connect` fails, `bind` fails too.
+        let held = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a free port");
+        let port = held.local_addr().expect("its address").port();
+        // `held` is a listener, so it answers: taken either way. What matters is the other one.
+        assert!(port_taken(port), "a listening port is taken");
+
+        // Closed, and nothing else on it: free.
+        drop(held);
+        assert!(!port_taken(port), "a closed port is free");
     }
 }
