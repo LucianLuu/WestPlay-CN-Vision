@@ -661,6 +661,25 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         // The page's process failed (a crash, or hung): load it again, and it gets the current state again
         // as it announces itself. The browser's: this WebView is gone, so start over (`BrowserGone`).
         match webview.take_failure() {
+            // A frame's process died: only that iframe is blank, the page around it keeps
+            // what it holds (a playing song, the app open). Loaded again by name or source;
+            // WebView2 naming no frame leaves nothing to do but the page's own reload, which
+            // the next arm does only when the page itself failed.
+            Some(webview::Failure::Frame) => {
+                let frames = webview.take_frames();
+                startup::mark(&format!(
+                    "host: the cabin page's frame failed; loading {} again",
+                    frames.len()
+                ));
+                if frames.is_empty() {
+                    if let Err(e) = webview.reload() {
+                        status.error = Some(format!("the cabin page couldn't be reloaded: {e}"));
+                        (config.on_status)(&status);
+                    }
+                } else {
+                    let _ = webview.reload_frames(&frames);
+                }
+            }
             Some(webview::Failure::Page) => {
                 startup::mark("host: the cabin page's process failed; reloading it");
                 if let Err(e) = webview.reload() {
@@ -2371,7 +2390,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     }),
                     (None, Some(found)) if found.truck == *truck => found.speakers.as_deref(),
                     _ if speakers::by_parts(truck.id.as_str()) => None,
-                    _ => speakers::in_truck(truck.id.as_str()),
+                    _ => speakers::in_truck_named(truck.id.as_str(), truck.name.as_str()),
                 }
             } else {
                 None

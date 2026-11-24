@@ -906,6 +906,22 @@ impl Safari {
             }
             // A page's process gone: the page loaded again; the browser's, every page gone with it.
             match tab.view.take_failure() {
+                // A frame's process died: only that iframe is blank, the page around it
+                // keeps what it holds (the tab the player was on). Loaded again by name
+                // or source; WebView2 naming no frame leaves the tab's own reload.
+                Some(webview::Failure::Frame) => {
+                    let frames = tab.view.take_frames();
+                    if frames.is_empty() {
+                        if let Err(e) = tab.view.reload() {
+                            log!("[safari] a page's process failed, and it couldn't be loaded again: {e}");
+                        } else {
+                            log!("[safari] a page's process failed: loaded again");
+                        }
+                    } else {
+                        let _ = tab.view.reload_frames(&frames);
+                        log!("[safari] a frame's process failed: {} loaded again", frames.len());
+                    }
+                }
                 Some(webview::Failure::Page) => {
                     log!("[safari] a page's process failed: loaded again");
                     let _ = tab.view.reload();

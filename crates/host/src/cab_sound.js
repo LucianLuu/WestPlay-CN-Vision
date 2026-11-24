@@ -168,12 +168,17 @@ window.westplayCabSound = (media, say) => {
       audio.source = source
       audio.wired = undefined
     }
-    if (audio.wired === speakers || (speakers && !head)) return
+    // The speakers once there's a head to hear them from; till then, the plain way (an element
+    // taken in meanwhile stays audible: before this, one already wired — the cab's walls, a tone
+    // or the spectrum — was left wired to nothing, silent until the head came: audio stopped
+    // entirely on the first song, 2026-11-20).
+    const using = speakers && head ? speakers : null
+    if (audio.wired === using) return
     audio.source.disconnect()
     for (const node of audio.nodes) node.disconnect()
     audio.nodes = []
     audio.meters = null
-    audio.wired = speakers
+    audio.wired = using
     const keep = (node) => (audio.nodes.push(node), node)
     // First of all, the tone.
     const bands = TONE.map(([, options]) => keep(new BiquadFilterNode(context, options)))
@@ -190,7 +195,7 @@ window.westplayCabSound = (media, say) => {
     const through = keep(new GainNode(context, { gain: outside ? muffled().gain : 1 }))
     walls.connect(through)
     audio.muffle = { filter: walls, gain: through }
-    if (!speakers) {
+    if (!using) {
       trim.connect(walls)
       through.connect(context.destination)
       return

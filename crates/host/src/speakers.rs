@@ -107,6 +107,39 @@ const DAF_2021: &[Speaker] = &[
     speaker([250.0, 4000.0], -6.0, Channel::Both, [0.0, 1.996, -0.194]),
 ];
 
+/// The DAF XG and XG+ (2021, and 2025's), left-hand drive: the XF's front stage with the
+/// subwoofer the bigger cabs carry, behind the passenger's seat (owner 2026-11-23, from 3.0's
+/// own tables). The doors hand everything below 80 Hz to it rather than playing it themselves
+/// (60–400 Hz at the XF, 80–400 here), and the subwoofer takes both sides mixed, its band
+/// open below ([`OPEN`]'s counterpart: 0 means no high-pass corner).
+///
+/// Its place is the cab's own, measured from the same origin as the rest: on the passenger's
+/// side, low and well back (x 0.651 — the driver's seat is x 0, the cab's middle 0.722 — y
+/// 0.785, z 1.089).
+const DAF_2021_XG: &[Speaker] = &[
+    speaker([80.0, 400.0], 0.0, Channel::Left, [-1.128, 0.896, 0.066]),
+    speaker([80.0, 400.0], 0.0, Channel::Right, [1.128, 0.896, 0.066]),
+    speaker([4000.0, OPEN], 0.0, Channel::Left, [-1.078, 1.596, -0.434]),
+    speaker([4000.0, OPEN], 0.0, Channel::Right, [1.078, 1.596, -0.434]),
+    speaker([400.0, 4000.0], 0.0, Channel::Left, [-0.828, 2.026, -0.164]),
+    speaker([400.0, 4000.0], 0.0, Channel::Right, [0.828, 2.026, -0.164]),
+    speaker([250.0, 4000.0], -6.0, Channel::Both, [0.0, 1.996, -0.194]),
+    speaker([0.0, 80.0], 0.0, Channel::Both, [0.651, 0.785, 1.089]),
+];
+
+/// The XG and XG+ right-hand drive: the left-hand one with the cab mirrored, as every DAF's
+/// is (the subwoofer at x -0.651).
+const DAF_2021_XG_UK: &[Speaker] = &[
+    speaker([80.0, 400.0], 0.0, Channel::Left, [-1.128, 0.896, 0.066]),
+    speaker([80.0, 400.0], 0.0, Channel::Right, [1.128, 0.896, 0.066]),
+    speaker([4000.0, OPEN], 0.0, Channel::Left, [-1.078, 1.596, -0.434]),
+    speaker([4000.0, OPEN], 0.0, Channel::Right, [1.078, 1.596, -0.434]),
+    speaker([400.0, 4000.0], 0.0, Channel::Left, [-0.828, 2.026, -0.164]),
+    speaker([400.0, 4000.0], 0.0, Channel::Right, [0.828, 2.026, -0.164]),
+    speaker([250.0, 4000.0], -6.0, Channel::Both, [0.0, 1.996, -0.194]),
+    speaker([0.0, 80.0], 0.0, Channel::Both, [-0.651, 0.785, 1.089]),
+];
+
 /// The DAF XD (day, sleeper and high sleeper cabs): the XF and XG's units (owner 2026-10-26: "same units as XG/XF but
 /// lower"). Its interior models are the 2021's from the roof down: the doors, the A-pillars, the windscreen and the
 /// overhead console's front the corners' units sit on, the same in the models to 2 mm (its roof is lower, and its
@@ -327,10 +360,44 @@ pub fn in_truck(id: &str) -> Option<&'static [Speaker]> {
         "volvo.fh16" => Some(VOLVO_FH16_2009),
         // A mod's DAF XG+ ("DAF 2021 Jasper") keeps the 2021's cab: its head sits 2 cm lower, its seat the same.
         // The XF Electric: the 2021 XF's cab and interior (doors, pillars, overhead console alike), placed alike.
+        // The XF's: the one set the 2021 DAFs shared before the XG and XG+'s subwoofer was
+        // found (2026-11-23). [`in_truck_named`] picks the bigger cabs their own.
         "daf.2021" | "new_daf.2021" | "daf.xf_electric" => Some(DAF_2021),
         "daf.xd" => Some(DAF_XD),
         _ => None,
     }
+}
+
+/// The 2021 DAFs by their cab as well as their id: the XG and XG+ carry a subwoofer the XF
+/// doesn't, and the game names the cab (`XF`, `XG`, `XG+`) where it gives no interior model.
+///
+/// The name comes localized, so both of the game's words for the bigger cabs are matched —
+/// `XG` and `XG+` as it writes them — and anything else gets the XF's set, which is what every
+/// 2021 DAF had before. A right-hand-drive cab's table is the left-hand one mirrored
+/// ([`DAF_2021_XG_UK`]); the game tells which by the interior it loads, which the id doesn't,
+/// so both are left for the caller to choose between ([`in_truck_named_uk`]).
+pub fn in_truck_named(id: &str, name: &str) -> Option<&'static [Speaker]> {
+    let bare = id.strip_prefix("vehicle.").unwrap_or(id);
+    if matches!(bare, "daf.2021" | "new_daf.2021" | "daf.xf_electric") {
+        let upper = name.trim().to_ascii_uppercase();
+        if upper.starts_with("XG") {
+            return Some(DAF_2021_XG);
+        }
+    }
+    in_truck(id)
+}
+
+/// As [`in_truck_named`], for a right-hand-drive cab: the same speakers with the cab mirrored
+/// (`uk` is the game's own word for those interiors).
+pub fn in_truck_named_uk(id: &str, name: &str, uk: bool) -> Option<&'static [Speaker]> {
+    let bare = id.strip_prefix("vehicle.").unwrap_or(id);
+    if uk && matches!(bare, "daf.2021" | "new_daf.2021" | "daf.xf_electric") {
+        let upper = name.trim().to_ascii_uppercase();
+        if upper.starts_with("XG") {
+            return Some(DAF_2021_XG_UK);
+        }
+    }
+    in_truck_named(id, name)
 }
 
 /// A coach body's speakers (the Coaches DLC's: their real ones have a cockpit system and a passengers' one, owner
@@ -1493,6 +1560,31 @@ mod tests {
         assert_eq!(in_truck("vehicle.scania.streamline"), in_truck("scania.r"));
         // The Actros 2009's come from its interior ([`by_parts`]).
         assert_eq!(in_truck("vehicle.mercedes.actros"), None);
+
+        // The 2021 DAFs by their cab: the XG and XG+ a subwoofer the XF hasn't (owner
+        // 2026-11-23, 3.0's own tables), both below 80 Hz and the doors handing that band to it.
+        let xf = in_truck_named("vehicle.daf.2021", "XF").unwrap();
+        let xg = in_truck_named("vehicle.daf.2021", "XG").unwrap();
+        let xg_plus = in_truck_named("vehicle.daf.2021", "XG+").unwrap();
+        assert_eq!(xf.len(), 7);
+        assert_eq!(xg.len(), 8);
+        assert_eq!(xg_plus.len(), 8);
+        assert_eq!(xg, DAF_2021_XG);
+        // The doors stop at 80 Hz (the XF's 60), and the last speaker is the subwoofer.
+        assert_eq!(xg[0].band, [80.0, 400.0]);
+        assert_eq!(xf[0].band, [60.0, 400.0]);
+        assert_eq!(xg[7].band, [0.0, 80.0]);
+        assert_eq!(xg[7].channel, Channel::Both);
+        assert_eq!(xg[7].at, [0.651, 0.785, 1.089]);
+        // Its right-hand cab mirrors it.
+        assert_eq!(DAF_2021_XG_UK[7].at, [-0.651, 0.785, 1.089]);
+        // Anything the game names otherwise keeps the XF's set, and so does every other truck.
+        assert_eq!(in_truck_named("vehicle.daf.2021", "XF Space Cab"), Some(DAF_2021));
+        assert_eq!(in_truck_named("vehicle.scania.s_2016", "S"), in_truck("vehicle.scania.s_2016"));
+        assert_eq!(in_truck_named("vehicle.daf.xd", "XD"), in_truck("vehicle.daf.xd"));
+        // A right-hand cab only where asked for.
+        assert_eq!(in_truck_named_uk("vehicle.daf.2021", "XG+", true), Some(DAF_2021_XG_UK));
+        assert_eq!(in_truck_named_uk("vehicle.daf.2021", "XG+", false), Some(DAF_2021_XG));
     }
 
     #[test]

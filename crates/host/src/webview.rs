@@ -16,13 +16,16 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_MOUSE_EVENT_KIND, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS, COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
     COREWEBVIEW2_PROCESS_FAILED_KIND, COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
-    COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE, CreateCoreWebView2EnvironmentWithOptions,
+    COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE,
+    COREWEBVIEW2_PROCESS_FAILED_KIND_FRAME_RENDER_PROCESS_EXITED, CreateCoreWebView2EnvironmentWithOptions,
     ICoreWebView2, ICoreWebView2_2, ICoreWebView2_3, ICoreWebView2CompositionController, ICoreWebView2Controller,
     ICoreWebView2Controller2, ICoreWebView2Controller3, ICoreWebView2Controller4, ICoreWebView2Environment,
-    ICoreWebView2Environment3,
+    ICoreWebView2Environment3, ICoreWebView2ProcessFailedEventArgs,
+    ICoreWebView2ProcessFailedEventArgs2,
     ICoreWebView2EnvironmentOptions, ICoreWebView2Settings2, ICoreWebView2Settings5, ICoreWebView2Settings6,
 };
 use webview2_com::{
+    ExecuteScriptCompletedHandler,
     AddScriptToExecuteOnDocumentCreatedCompletedHandler, CoTaskMemPWSTR, CoreWebView2EnvironmentOptions,
     CreateCoreWebView2CompositionControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
     DocumentTitleChangedEventHandler, NavigationStartingEventHandler, NewWindowRequestedEventHandler,
@@ -300,10 +303,23 @@ pub fn wait_for_browsers(timeout: Duration) {
 /// Ordered by how much they take to recover from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Failure {
+    /// A frame's process exited: the iframe it drew is blank, the page around it is not. A
+    /// reload of the page would lose what else it holds (a player's song, its place), so only
+    /// the frames named are loaded again (`reload_frames`); the page is only reloaded when
+    /// WebView2 names no frame to reload.
+    Frame,
     /// The page's own process exited or stopped responding: the page is gone (blank) until reloaded.
     Page,
     /// The browser process exited: the whole WebView is gone and must be created again.
     Browser,
+}
+
+/// A frame WebView2 named when its process failed: what to look for in the page (`name`, the
+/// `name` attribute, or `source`, the `src`), and what to load again (`source`).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct FailedFrame {
+    pub name: String,
+    pub source: String,
 }
 
 /// The frame the thread's WebViews render onto, `width` x `height`: one compositor, and the visual that is
@@ -397,6 +413,8 @@ pub struct OffscreenWebView {
     page_messages: Rc<RefCell<Vec<String>>>,
     /// The worst process failure since last taken (`take_failure`).
     failure: Rc<Cell<Option<Failure>>>,
+    /// The frames WebView2 named for the last failure of theirs (`take_frames`).
+    frames: Rc<RefCell<Vec<FailedFrame>>>,
     pub version: String,
 }
 
@@ -537,7 +555,9 @@ impl OffscreenWebView {
         unsafe { webview.add_WebMessageReceived(&handler, &mut token)? };
 
         let failure = Rc::new(Cell::new(None));
+        let frames = Rc::new(RefCell::new(Vec::new()));
         let failed = failure.clone();
+        let broken = frames.clone();
         let handler = ProcessFailedEventHandler::create(Box::new(move |_webview, args| {
             if let Some(args) = args {
                 let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
@@ -545,6 +565,11 @@ impl OffscreenWebView {
                 unsafe { args.ProcessFailedKind(&mut kind)? };
                 if let Some(this) = failure_of(kind) {
                     // A browser failure outranks a page failure noted before it.
+                    if this == Failure::Frame {
+                        broken.borrow_mut().extend(frames_of(&args));
+                    } else {
+                        broken.borrow_mut().clear();
+                    }
                     failed.set(failed.get().max(Some(this)));
                 }
             }
@@ -554,12 +579,56 @@ impl OffscreenWebView {
         // SAFETY: the handler and the token are locals for the call; WebView2 keeps its own reference to the handler.
         unsafe { webview.add_ProcessFailed(&handler, &mut token)? };
 
-        Ok(Self { environment, root, host, composition, controller, webview, page_messages, failure, version })
+        Ok(Self { environment, root, host, composition, controller, webview, page_messages, failure, frames, version })
     }
 
     /// The worst WebView2 process failure since the last call, if any.
     pub fn take_failure(&self) -> Option<Failure> {
         self.failure.take()
+    }
+
+    /// The frames WebView2 named for the last frame failure since the last call, if any.
+    pub fn take_frames(&self) -> Vec<FailedFrame> {
+        std::mem::take(&mut self.frames.borrow_mut())
+    }
+
+    /// Loads the named frames again, and nothing else: the page keeps what it holds (a song
+    /// playing, its place) while the iframes whose own process died are drawn anew.
+    ///
+    /// The frame is found by its `name` or its `src` and given that `src` back, which loads it
+    /// again; frames inside it are looked into as far as the page allows (a frame of another
+    /// origin throws on `contentDocument`, and that is fine: its own frames go with it).
+    /// What WebView2 named but no frame of the page matches is left alone rather than the whole
+    /// page being reloaded — a frame that is gone from the page has nothing to bring back.
+    pub fn reload_frames(&self, failed: &[FailedFrame]) -> windows::core::Result<()> {
+        let list = serde_json::to_string(failed).unwrap_or_else(|_| "[]".to_owned());
+        // The page's own frames, matched by name or source; the search goes into nested
+        // frames, which a same-origin frame allows and another one refuses (try/catch).
+        let script = format!(
+            r#"(() => {{
+  const failed = {list};
+  const again = (page) => {{
+    for (const frame of page.querySelectorAll('iframe, frame')) {{
+      const one = failed.find((each) =>
+        (each.name && each.name === frame.name) ||
+        (each.source && each.source === frame.src));
+      if (one) {{
+        const src = one.source || frame.src;
+        frame.src = 'about:blank';
+        frame.src = src;
+      }} else {{
+        try {{
+          if (frame.contentDocument) again(frame.contentDocument);
+        }} catch {{}}
+      }}
+    }}
+  }};
+  again(document);
+}})()"#
+        );
+        // SAFETY: the WebView is ours and alive; the script is a plain string, and nothing
+        // of WebView2's memory crosses back through the `None` handler.
+        unsafe { self.webview.ExecuteScript(&HSTRING::from(script), None) }
     }
 
     /// Logs what happens to this WebView's page as `name`'s (`[spotify] …`): each page load, done or failed
@@ -1031,6 +1100,54 @@ fn fitted((room_width, room_height): (u32, u32), width: u32, height: u32) -> (u3
     ((width * grow).round() as u32, (height * grow).round() as u32, 1.0 / grow)
 }
 
+/// The frames WebView2 names for a process that just failed: what `reload_frames` looks for.
+///
+/// Its second interface (the one the event's arguments are queried for here) is where the
+/// frame list lives; the first has only the kind. Empty when WebView2 names none (a page
+/// without iframes, or a version that doesn't say).
+fn frames_of(args: &ICoreWebView2ProcessFailedEventArgs) -> Vec<FailedFrame> {
+    let Ok(args2) = args.cast::<ICoreWebView2ProcessFailedEventArgs2>() else {
+        return Vec::new();
+    };
+    // SAFETY: `args` is alive through the callback; the collection and each frame info in it
+    // are its own, and `CoTaskMemPWSTR` frees the strings WebView2 hands over.
+    unsafe {
+        let Ok(collection) = args2.FrameInfosForFailedProcess() else {
+            return Vec::new();
+        };
+        let Ok(mut infos) = collection.GetIterator() else {
+            return Vec::new();
+        };
+        let mut frames = Vec::new();
+        let mut has = windows::core::BOOL::default();
+        if infos.HasCurrent(&mut has).is_err() || !has.as_bool() {
+            return frames;
+        }
+        loop {
+            let Ok(info) = infos.GetCurrent() else { break };
+            let (mut name, mut source) = (PWSTR::null(), PWSTR::null());
+            let _ = info.Name(&mut name);
+            let _ = info.Source(&mut source);
+            let read = |text: PWSTR| {
+                if text.is_null() {
+                    String::new()
+                } else {
+                    CoTaskMemPWSTR::from(text).to_string()
+                }
+            };
+            let (name, source) = (read(name), read(source));
+            if !name.is_empty() || !source.is_empty() {
+                frames.push(FailedFrame { name, source });
+            }
+            let mut next = windows::core::BOOL::default();
+            if infos.MoveNext(&mut next).is_err() || !next.as_bool() {
+                break;
+            }
+        }
+        frames
+    }
+}
+
 /// What a WebView2 process failure means for WestPlay (Microsoft's guidance: reload after the page's
 /// process exits or hangs, create the WebView again after the browser process exits; WebView2 restarts its
 /// other processes itself, and a frame's process is no concern of a page without frames).
@@ -1039,6 +1156,11 @@ fn failure_of(kind: COREWEBVIEW2_PROCESS_FAILED_KIND) -> Option<Failure> {
         COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED => Some(Failure::Browser),
         COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
         | COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE => Some(Failure::Page),
+        // A frame's own process: only that iframe is blank, the page around it keeps what it
+        // holds (owner 2026-11-24, 3.0's own recovery: a player's song went on playing while
+        // the video beside it was loaded again).
+        COREWEBVIEW2_PROCESS_FAILED_KIND_FRAME_RENDER_PROCESS_EXITED => Some(Failure::Frame),
+        // The GPU's: WebView2 restarts it, and nothing of the page is lost.
         _ => None,
     }
 }
@@ -1429,9 +1551,11 @@ mod tests {
         assert_eq!(failure_of(COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED), Some(Failure::Page));
         assert_eq!(failure_of(COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE), Some(Failure::Page));
         assert_eq!(failure_of(COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED), Some(Failure::Browser));
-        // WebView2 restarts its GPU process itself; the page has no frames.
+        // WebView2 restarts its GPU process itself, and nothing of the page goes with it.
         assert_eq!(failure_of(COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED), None);
-        assert_eq!(failure_of(COREWEBVIEW2_PROCESS_FAILED_KIND_FRAME_RENDER_PROCESS_EXITED), None);
+        // A frame's own process: only that iframe, and outranked by the page's failure.
+        assert_eq!(failure_of(COREWEBVIEW2_PROCESS_FAILED_KIND_FRAME_RENDER_PROCESS_EXITED), Some(Failure::Frame));
+        assert_eq!(Some(Failure::Frame).max(Some(Failure::Page)), Some(Failure::Page));
         // The browser failing outranks the page failing.
         assert_eq!(Some(Failure::Page).max(Some(Failure::Browser)), Some(Failure::Browser));
     }

@@ -570,7 +570,15 @@ unsafe fn refresh(context: &ID3D11DeviceContext, texture: ID3D11Texture2D, heigh
             // The cab drawn, for the camera system: not by the tablet in a truck whose cab has its mark (the tablet
             // is drawn from outside the cab too, as a hookup on a set's toy spot); by a bus's own screen still, drawn
             // only from inside.
-            if (on_it && !(tablet && CAB_MARK_SAID.load(Ordering::Acquire))) || given_up {
+            // A bus's own screen is left out too once the tablet has taken WestPlay over in
+            // it: the bus's screen keeps the game's from then on, and the tablet's own drawing
+            // is what shows WestPlay. Seen through the windscreen from outside the bus, the
+            // tablet went on counting as "in the cab", so the sound never dulled as it should
+            // out there (owner 2026-11-23, from 3.0's judgement: it words the same pair as
+            // `tablet && (cab_mark_seen || tablet_took_bus)`; ours was the first half only).
+            let tablet_out = tablet
+                && (CAB_MARK_SAID.load(Ordering::Acquire) || tablet_took);
+            if (on_it && !tablet_out) || given_up {
                 plugin.screen_frame.store(plugin.heartbeat.load(Ordering::Relaxed), Ordering::Release);
             }
         }

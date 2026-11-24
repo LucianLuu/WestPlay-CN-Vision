@@ -513,11 +513,14 @@ impl WebApp {
             Command::SetText { text } => {
                 self.view.post_json(&serde_json::json!({ "type": "webAppText", "text": text }).to_string())
             }
-            // The cabin's own input method's pick, at the page's own caret, through the browser itself.
-            Command::InsertText { text } => {
-                let parameters = serde_json::json!({ "text": text }).to_string();
-                self.view.devtools("Input.insertText", &parameters)
-            }
+            // The cabin's own input method's pick, at the page's own caret. The page
+            // does it itself (`webapp.js`'s `insert`): `Input.insertText` through DevTools
+            // only lands in a field the browser itself has focused, and a page's own
+            // components (Bilibili's search box) never are — the pick went nowhere
+            // (owner 2026-11-23).
+            Command::InsertText { text } => self.view.post_json(
+                &serde_json::json!({ "type": "webAppInsert", "text": text }).to_string(),
+            ),
             Command::Enter => self.view.post_json(r#"{"type":"webAppKey","key":"Enter"}"#),
         }
     }

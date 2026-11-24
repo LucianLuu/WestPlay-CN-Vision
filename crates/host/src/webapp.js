@@ -400,6 +400,24 @@
   webview.addEventListener('message', (event) => {
     const message = event.data
     if (!message) return
+    // The cabin's own input method's pick: at the field's own caret, the page doing it
+    // itself (`insert` above) so it lands even in a field the browser never focused
+    // (Bilibili's own search box, under DevTools' Input.insertText, took nothing).
+    if (message.type === 'webAppInsert') {
+      const text = String(message.text ?? '')
+      let element = focused()
+      if (!element || !field(element)) element = writeTarget()
+      if (element) {
+        if (element !== focused()) {
+          try {
+            element.focus()
+          } catch {}
+        }
+        if (element.isContentEditable || field(element)) insert(text)
+        else writeText(element, String(element.value ?? '') + text)
+      }
+      return
+    }
     // The cabin's own keyboard typing into the field (its keys are the page's field's text, whole).
     if (message.type === 'webAppText') {
       const text = String(message.text ?? '')
