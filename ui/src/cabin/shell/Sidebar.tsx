@@ -24,10 +24,8 @@ export function Sidebar() {
   const tablet = useLive((state) => state.screenLayout === 'tablet')
 
   return (
-    // 侧栏不参与 View Transition（owner 2026-11-23）：透明窗口 + WebView2 下，
-    // 侧栏和它的图标快照会在切应用之后留在画面上，压在新页面上层（截图里侧栏浮在
-    // Safari 页面上）。切换动画本身还在，只是不再把侧栏做成快照。
-    <aside className="sidebar glass lg-system">
+    // Its own transition name: it stays put while screens change (shell/transitions.css).
+    <aside className="sidebar glass lg-system" style={{ viewTransitionName: 'sidebar' }}>
       <div className="status">
         <div className="time">{gameTime === null ? '--:--' : formatGameTime(gameTime, clock)}</div>
         {/* Placeholder until the phone remote (planned) reports the real phone. */}
@@ -82,7 +80,7 @@ function RecentApp({ app, current }: { app: AppId; current: boolean }) {
       aria-label={text.apps[app]}
       onClick={() => go({ type: 'openApp', app }, 'sidebar')}
     >
-      <img src={icon} alt="" />
+      <img src={icon} alt="" style={{ viewTransitionName: `recent-${app}`, viewTransitionClass: 'recent' }} />
       {launching && <img className="launch-copy" src={icon} alt="" style={LAUNCH_STYLE} />}
     </button>
   )
