@@ -267,6 +267,10 @@
     }
     const cookie = pairs.map(([name, value]) => `${name}=${value}`).join('; ')
     if (cookie) headers.Cookie = cookie
+    // The site's own cookie, as the sign-in window returned it (`uin`, `qqmusic_key`, `qm_keyst`,
+    // …): `run_westplay.py`'s /westplay/song_url asks the site with *these* names, since the
+    // layer's mapped pair above means nothing to y.qq.com (owner 2026-11-20).
+    if (savedCookie) headers['X-Westplay-Site-Cookie'] = savedCookie
     return headers
   }
 
@@ -1158,6 +1162,30 @@
   }
 
   const streamOf = async (mid, fresh = false) => {
+    // Our own route first: it asks the site's CgiGetVkey *with the file's name*, which is what a
+    // VIP song needs. The layer asks without it, and the site reads that as an account with no
+    // rights — `result` 104003 on songs the account actually pays for (owner 2026-11-20).
+    //
+    // The credential goes as the site names it (`uin`, `qqmusic_key`, `qm_keyst` …): the layer's
+    // `qq_musicid` / `musickey` pair means nothing to y.qq.com, so both sets are sent and
+    // `run_westplay.py` picks the site's own names.
+    let viaOurs = null
+    try {
+      viaOurs = await get(`/westplay/song_url/${encodeURIComponent(mid)}`)
+    } catch {
+      // Not there (an older layer without the route), or it couldn't answer: the layer's own
+      // route below says what it has.
+    }
+    if (viaOurs && viaOurs.result === 0 && viaOurs.purl) {
+      const address = CDN + viaOurs.purl
+      streams.set(address, {
+        mid,
+        filename: String(viaOurs.filename ?? ''),
+        result: viaOurs.result,
+        purl: String(viaOurs.purl),
+      })
+      return address
+    }
     const found = await get(`/song/${encodeURIComponent(mid)}/url`, { fresh })
     const list = Array.isArray(found) ? found : found?.data
     const item = list?.[0]
