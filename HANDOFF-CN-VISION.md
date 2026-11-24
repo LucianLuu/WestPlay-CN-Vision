@@ -348,11 +348,37 @@ cd ui && npx tsc -b --noEmit                     0 errors
 
 | 事项 | 状态 |
 |---|---|
-| **账号页按钮没文字** | ← 优先，见第一节 |
 | Safari 地址栏无候选框 | 暂停。`attach` 成功、拼音表加载成功，但按键到不了 `press` |
 | DAF 右舵低音炮 | `in_truck_named_uk` 写好了，缺右舵判断来源，没接 |
 | 哔哩哔哩客户端 | 小千的补丁基于另一个分支（有 `bilibili.rs`/`bilibili.js`），我们的仓库从来没有那两个文件，`git apply` 失败。要他的完整分支才行 |
-| WebView2 158 崩溃 | 前端规避代码已全有（SHA 一致）。若仍崩，根因在 Chromium 内部 |
+| WebView2 158 崩溃 | 前端规避已进 `demo.ts`（不再是「文件一致但没执行」）。若仍崩，根因在 Chromium 内部；心跳会让页面 7 秒内自己回来 |
+
+### ⚠ 不在仓库里的一处修复（重新打包会丢）
+
+`app/qq-music-layer/` 整个目录在 `.gitignore` 里，所以中间层的改动**不进仓库**。
+其中有一行是 VIP 歌能播的必要条件，重装/重打包后如果 VIP 又播不了，先查这里：
+
+```python
+# app/qq-music-layer/web/run_westplay.py，_westplay_song_url()
+# 站点 cookie 里的名字是 uin，不是层自己那套 qq_musicid / qq_uin。
+# 缺了它 uin 退到 "0"，站点把请求当成匿名 → result 104003（VIP 歌无权限）。
+uin = _westplay_cookie(cookie, "uin", "qq_musicid", "qq_uin") or "0"
+```
+
+完整的 VIP 链路（三处缺一不可）：
+
+1. 前端 `streamOf` 先走 `/westplay/song_url/{mid}`（`crates/host/src/qq_music.js`，**在仓库里**）；
+2. 请求带 `X-Westplay-Site-Cookie`（同上，**在仓库里**）；
+3. `run_westplay.py` 取 `uin` 时要认站点原名（**不在仓库里**，见上）。
+
+### 也记一笔：账号页转圈
+
+`ai` 的转圈条件是 `s === null`（登录态未知就转）。我们把启动时的 check 去掉了，
+而宿主侧 `AccountAction::Check` 本来就是空实现（`weblogin.rs:208`），`signed_in`
+永远是 `None` —— 三行会永远转圈，连「登录」按钮都点不到。
+
+现在改成 `s === null && !!l`（只有正在登录才转），未登录就显示可点的按钮。
+这一处在 `tools/scripts/accounts_services.py` 里，那个脚本也不进仓库。
 
 ---
 
