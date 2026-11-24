@@ -20,11 +20,6 @@
 /// or two may pass without it in the cab as well).
 pub const OUTSIDE_AFTER_FRAMES: u64 = 4;
 
-/// How far the camera has to be from the driver's head to count as out of the cab (metres): the
-/// third-person one sits a few metres behind, a head leaning out about half a metre, and the cab's own
-/// camera within a hand's width of the seat.
-pub const OUTSIDE_METRES: f64 = 1.2;
-
 #[derive(Default)]
 pub struct Camera {
     truck: String,
@@ -43,25 +38,14 @@ impl Camera {
     /// cab, and switching between its menus can draw the cab with the camera outside (a player's video,
     /// 2026-10-28: the music came clear for a moment, as if in the cab). So the camera stays where it was as the
     /// game paused (owner 2026-10-26: outside, the music came clear as it paused) until the game runs again.
-    pub fn outside(&mut self, truck: &str, screen_frame: u64, game_frame: u64, electrics: bool, paused: bool) -> bool {
-        self.outside_with_camera(truck, screen_frame, game_frame, electrics, paused, None)
-    }
 
-    /// As [`outside`](Self::outside), with the camera's distance from the driver's head where the plugin
-    /// knows it: past [`OUTSIDE_METRES`] the camera is out of the cab, whatever the screen does.
-    ///
-    /// The screen's drawing alone missed the third-person camera: that one often still draws WestPlay's
-    /// screen (from the side, through the windows), so it read as "in the cab" and the sound never went
-    /// dull (owner 2026-11-19, both our players and the upstream Player). The camera's own position is
-    /// what being outside means; the frames stay the answer when the game won't say where it is.
-    pub fn outside_with_camera(
+    pub fn outside(
         &mut self,
         truck: &str,
         screen_frame: u64,
         game_frame: u64,
         electrics: bool,
         paused: bool,
-        camera_metres: Option<f64>,
     ) -> bool {
         if self.truck != truck {
             self.truck = truck.to_owned();
@@ -75,32 +59,19 @@ impl Camera {
         }
         let undrawn = game_frame.saturating_sub(screen_frame) > OUTSIDE_AFTER_FRAMES;
         if !paused {
-            let away = camera_metres.is_some_and(|metres| metres > OUTSIDE_METRES);
-            self.outside = self.seen && electrics && (undrawn || away);
+            // What the game draws, and only that: the cab's screen goes undrawn when the camera leaves it.
+            // A distance from the camera was tried as well (2026-11-20 to 2026-11-22) and taken out again:
+            // the camera's position and the truck's are read a frame apart, so at speed the distance
+            // drifts about a frame's travel — half a metre at 130 km/h — and its answer flickered every
+            // frame, heard as the sound stuttering between its in-cab and out-of-cab filters. Upstream's
+            // own judgement is this one, and three of its releases (2.3.0, 2.4.1, 3.0) hold still at speed.
+            self.outside = self.seen && electrics && undrawn;
         }
         self.outside
     }
 
     /// With the camera outside, how far it is from the driver's head (metres); `None` with it inside, or the
     /// camera not known (the plugin couldn't find it in the game).
-    /// How far the camera is from the driver's head (metres), whatever the camera is doing: `None` where
-    /// the plugin didn't find it. The judgement of "out of the cab" is made of this
-    /// ([`OUTSIDE_METRES`]), so it has to be readable before `outside` is known.
-    pub fn camera_metres(telemetry: &westplay_shared::Telemetry) -> Option<f64> {
-        if !telemetry.camera_known {
-            return None;
-        }
-        let truck = Pose::of(telemetry);
-        let camera = [telemetry.camera_x as f64, telemetry.camera_y as f64, telemetry.camera_z as f64];
-        let head = [
-            telemetry.cabin_x as f64 + telemetry.head_x as f64,
-            telemetry.cabin_y as f64 + telemetry.head_y as f64,
-            telemetry.cabin_z as f64 + telemetry.head_z as f64,
-        ];
-        let seat = truck.to_world(head);
-        Some(camera.iter().zip(seat).map(|(c, s)| (c - s).powi(2)).sum::<f64>().sqrt())
-    }
-
     pub fn distance(telemetry: &westplay_shared::Telemetry, outside: bool) -> Option<f64> {
         if !outside || !telemetry.camera_known {
             return None;
@@ -297,6 +268,8 @@ mod tests {
         }
         outside
     }
+
+
 
     #[test]
     fn is_outside_a_few_frames_after_the_cabs_screen_goes_undrawn_and_inside_as_soon_as_its_drawn() {

@@ -71,3 +71,10 @@ __pycache__/
 *.bak-*
 *-backup/
 /dist-ours-backup/
+
+# 3.0 的构建/改写脚本：里面有 3.0 产物的文件名（companion-BB_QWF30.js 等），
+# 等于把资产清单公开。只留在本地，不进仓库（owner 2026-11-24）。
+/tools/scripts/rebuild_companion.py
+/tools/scripts/rebuild_companion_css.py
+/tools/scripts/accounts_services.py
+/tools/scripts/verify_158.py

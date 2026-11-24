@@ -39,6 +39,21 @@ export function TruckScreen({
   /** More over the glass, in the screen's own pixels. */
   children?: ReactNode
 }) {
+  // The preview inside is told when the cabin is changing screens, so the reflection under the
+  // bezel can be dropped for the length of it: with it, Edge WebView2 158 stopped the whole page
+  // (`STATUS_BREAKPOINT`) when the preview opened an app. The cabin calls this
+  // (`cabin/demo.ts`, `stepAroundViewTransitions`), and the CSS rule it toggles is in `room.css`.
+  useEffect(() => {
+    const host = window as typeof window & { westplayScreenChanging?: (on: boolean) => void }
+    host.westplayScreenChanging = (on: boolean) => {
+      document.documentElement.toggleAttribute('data-screen-changing', on)
+    }
+    return () => {
+      delete host.westplayScreenChanging
+      document.documentElement.removeAttribute('data-screen-changing')
+    }
+  }, [])
+
   return (
     <div className="ts" data-pose={pose} style={{ '--glow': glow } as CSSProperties}>
       <div className="ts-light" />

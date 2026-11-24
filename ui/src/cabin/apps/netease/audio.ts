@@ -55,23 +55,24 @@ export function sound(): HTMLAudioElement | null {
 
 /** Sets what the sound tells the app. */
 /**
- * Stops telling the app about the sound, and nothing more.
+ * Stops telling the app about the sound where only the window was listening, and nothing more.
  *
  * The app's window comes and goes (its page is drawn as it's opened, closed when another app is); what the
  * sound does is the cab's player's business, not the window's. Telling it to stop with the window took the
  * song away with it — a switch to another app and back was silence (owner 2026-11-20).
  */
 export function unlisten(): void {
-  events = null
+  // `events` stays: the handlers that must keep working (a song ending, failing) still reach it. Only
+  // the ones the window drew with are unhooked below.
   const audio = element
   if (!audio) return
-  audio.onplay = null
-  audio.onpause = null
+  // Only what was there for the window to draw: its position, its level, its length. What plays on
+  // — a song ending, failing, being played or paused, a stream arriving — stays wired, because a
+  // window coming and going is not a song stopping. Unhooking `onended` was why a song playing
+  // while another app was open stopped at its end instead of going on to the next (owner
+  // 2026-11-21).
   audio.ontimeupdate = null
   audio.onseeked = null
-  audio.onended = null
-  audio.onerror = null
-  audio.oncanplay = null
   audio.onloadedmetadata = null
   audio.onvolumechange = null
 }

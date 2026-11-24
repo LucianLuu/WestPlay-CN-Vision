@@ -73,6 +73,34 @@ struct TrayWordsInner {
 /// `companion_ready` would bring the window back to the front — owner 2026-11-14).
 static HIDDEN_BY_USER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// When the companion's preview (the demo iframe, `cabin.html?demo&power`) last said it was
+/// alive, in seconds since WestPlay started (`Clock::secs` of `std::time::Instant`), or 0 when
+/// it never has.
+///
+/// A heartbeat, not a process list: Edge WebView2 158's `STATUS_BREAKPOINT` kills the page's
+/// **renderer** while the browser process stays up, so watching processes for a page's death
+/// never sees it (2026-11-24, the analysis that named this). A page whose renderer is gone
+/// stops sending these, whatever the browser around it is doing.
+///
+/// Only the preview beats: the hidden players (Spotify, YouTube, NetEase) do not, so one of
+/// them closing is not read as a crash — the reason watching renderer processes was dropped in
+/// the first place (2026-11-23, the window reloading itself as a player closed).
+static PREVIEW_BEAT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The preview in the companion's setup is alive: it beats about once a second
+/// (`companion/src/companion/Preview.tsx`).
+///
+/// Recorded here because the page cannot be asked: with its renderer dead WebView2 answers
+/// nothing, and the whole point is to tell that apart from a page still working.
+#[tauri::command]
+fn preview_alive() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0);
+    PREVIEW_BEAT.store(now, std::sync::atomic::Ordering::Release);
+}
+
 /// The companion's page has drawn its first screen: the window shows.
 #[tauri::command]
 fn companion_ready(window: WebviewWindow) {
@@ -274,6 +302,12 @@ fn open_social(site: Social) {
 fn watch_companion(app: tauri::AppHandle) {
     use tauri::Manager;
 
+    /// How long the preview may go without a beat before its page is taken for dead (seconds):
+    /// it beats every second, so this is several misses, and longer than any hitch a slow frame
+    /// or a paused window is worth (the window being hidden holds its animations, not its
+    /// timers).
+    const PREVIEW_SILENT: u64 = 6;
+
     std::thread::spawn(move || {
         let mut known: Option<Vec<u32>> = None;
         loop {
@@ -283,36 +317,62 @@ fn watch_companion(app: tauri::AppHandle) {
                 // The window gone is the app closing: nothing left to watch.
                 return;
             }
+            let mut lost = None;
             // 只看 WebView2 的**浏览器**进程：渲染进程随播放器页面开关而起落是正常的，
             // 把它们算进来会让主窗口在别的页面关闭时被误判成崩溃而重载。
             let now = westplay_host::page_host_processes();
             if let Some(before) = &known {
                 let gone: Vec<u32> = before.iter().copied().filter(|id| !now.contains(id)).collect();
                 if !gone.is_empty() && !now.is_empty() {
-                    // Where the page should be: what it was showing, or the Setup's own address.
-                    // Where the Setup lives: on Windows Tauri serves the bundled page from
-                    // `http://tauri.localhost/` (its `wry` workaround for `tauri://localhost`). Falling
-                    // back to it matters — the address asked for is the one *before* the crash, and a
-                    // page already showing Chromium's error page may report that error page's address.
-                    let address = window
-                        .url()
-                        .ok()
-                        .filter(|url| {
-                            url.path().ends_with(".html")
-                                || url.path().trim_end_matches('/').is_empty()
-                        })
-                        .unwrap_or_else(|| {
-                            tauri::Url::parse("http://tauri.localhost/index.html")
-                                .expect("the Setup's own address")
-                        });
-                    westplay_host::log!(
-                        "[companion] the page's process {} went; going back to {address}",
+                    lost = Some(format!(
+                        "the page's process {} went",
                         gone.iter().map(u32::to_string).collect::<Vec<_>>().join(", ")
-                    );
-                    let _ = window.navigate(address);
+                    ));
                 }
             }
             known = Some(now);
+
+            // The preview's page, by its heartbeat: Edge WebView2 158's STATUS_BREAKPOINT kills
+            // the renderer and leaves the browser process up, so the list above never moves.
+            // Only once it has beaten at least once — a window still loading its Setup, or one
+            // whose setup was never opened, has no preview to lose.
+            let beat = PREVIEW_BEAT.load(Ordering::Acquire);
+            if lost.is_none() && beat > 0 {
+                let now_secs = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|since| since.as_secs())
+                    .unwrap_or(0);
+                if now_secs.saturating_sub(beat) > PREVIEW_SILENT {
+                    lost = Some(format!(
+                        "the preview stopped answering {}s ago",
+                        now_secs.saturating_sub(beat)
+                    ));
+                    // Put back to 0: the beat that comes with the reloaded page starts it again,
+                    // and until then a second reload of a page that is still loading is no help.
+                    PREVIEW_BEAT.store(0, Ordering::Release);
+                }
+            }
+
+            if let Some(why) = lost {
+                // Where the page should be: what it was showing, or the Setup's own address.
+                // Where the Setup lives: on Windows Tauri serves the bundled page from
+                // `http://tauri.localhost/` (its `wry` workaround for `tauri://localhost`). Falling
+                // back to it matters — the address asked for is the one *before* the crash, and a
+                // page already showing Chromium's error page may report that error page's address.
+                let address = window
+                    .url()
+                    .ok()
+                    .filter(|url| {
+                        url.path().ends_with(".html")
+                            || url.path().trim_end_matches('/').is_empty()
+                    })
+                    .unwrap_or_else(|| {
+                        tauri::Url::parse("http://tauri.localhost/index.html")
+                            .expect("the Setup's own address")
+                    });
+                westplay_host::log!("[companion] {why}; going back to {address}");
+                let _ = window.navigate(address);
+            }
         }
     });
 }
@@ -451,6 +511,7 @@ fn main() {
             open_social,
             app_log_place,
             page_log,
+            preview_alive,
             customize::customize_list,
             customize::add_wallpapers,
             customize::add_icon_set,

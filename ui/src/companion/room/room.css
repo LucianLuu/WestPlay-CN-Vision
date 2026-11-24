@@ -171,6 +171,15 @@
   -webkit-box-reflect: below 16px linear-gradient(transparent 72%, rgb(255 255 255 / 0.07));
 }
 
+/* While the cabin inside is changing screens, no reflection: the reflected layer and the View
+   Transition's snapshots together stopped the page in Edge WebView2 158 (`STATUS_BREAKPOINT`).
+   The cabin says when (`cabin/demo.ts` → `TruckScreen.tsx`), and the rule comes back off by
+   itself when it stops saying so. The float above keeps going: stopping it would jump the
+   screen, and it is not what the browser chokes on. */
+html[data-screen-changing] .ts-bezel {
+  -webkit-box-reflect: initial;
+}
+
 .ts-glass {
   position: relative;
   width: 100%;

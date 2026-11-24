@@ -51,6 +51,8 @@ export type DemoReport =
   | { type: 'located'; id: number; rect: { x: number; y: number; width: number; height: number } | null }
   /** Where it is now (`home`, `dashboard`, `app:music`), each time that changes. */
   | { type: 'route'; route: string }
+  /** Still here: about once a second (see `installDemo`'s beating). */
+  | { type: 'alive' }
 
 /** Marks demo messages apart from anything else posted between the windows. */
 export const DEMO_CHANNEL = 'westplay-demo'
@@ -67,6 +69,9 @@ export function installDemo(): void {
     power: { phase: 'off', since: performance.now(), observed: true },
     navigation: { ...cabin.navigation, route: { kind: 'home' }, base: 'home' },
   })
+  // The browser's View Transition is stepped around here (below): it stopped the whole page in
+  // Edge WebView2 158 when the preview opened an app.
+  stepAroundViewTransitions()
 
   const report = (message: DemoReport) =>
     window.parent.postMessage({ channel: DEMO_CHANNEL, ...message }, location.origin)
@@ -139,4 +144,65 @@ export function installDemo(): void {
     route = now
     report({ type: 'route', route })
   })
+  // Still here, once a second. Edge WebView2 158's STATUS_BREAKPOINT takes this page's renderer
+  // out while the browser process around it stays up, so a process list can't tell it from a
+  // working page; a beat that stops can, and the companion reloads the Setup when it does
+  // (`useDemo.ts`, then `app/src/main.rs`'s `watch_companion`). The window's own timers keep
+  // running while it's behind or minimised, so a backgrounded window is not read as dead.
+  window.setInterval(() => report({ type: 'alive' }), 1000)
 }
+
+/**
+ * Steps around a bug in Edge WebView2 158's View Transition, in the preview beside the setup.
+ *
+ * With that build, opening an app in the preview (a View Transition, `state/launch.ts`) stopped
+ * the whole page with `STATUS_BREAKPOINT`. Upstream's 3.0 does two things about it before letting
+ * the browser take its snapshots, and the page beside the setup does a third:
+ *
+ * 1. Every running *finite* animation is finished — now, and once more on the next frame (the
+ *    first pass can start new ones as React commits). Infinite ones are left alone: finishing
+ *    one would snap it to its end, a visible jump.
+ * 2. The companion is told, so its preview's frame drops its `-webkit-box-reflect` for the
+ *    length of the transition (`westplayScreenChanging`, `companion/Bezel.tsx`). The reflected
+ *    layer is the other half of what that build chokes on.
+ *
+ * A count, not a flag: two transitions can overlap, and the reflection must only come back
+ * when the last one is done. `finally` rather than `then`: a skipped or failed transition has
+ * to put the count back too, or the reflection would never return.
+ *
+ * Only the demo installs this. The cab's own page, full screen, is untouched — the bug needs
+ * the preview's frame around it.
+ */
+function stepAroundViewTransitions(): void {
+  const original = document.startViewTransition?.bind(document)
+  if (!original) return
+  const companion = window.parent
+  let running = 0
+  const tell = () => {
+    // The companion's page can be mid-load or mid-unload; that is not the transition's problem.
+    try {
+      ;(companion as { westplayScreenChanging?: (on: boolean) => void }).westplayScreenChanging?.(running > 0)
+    } catch {}
+  }
+  const finishFinite = () => {
+    for (const animation of document.getAnimations()) {
+      if (animation.playState !== 'running') continue
+      // Infinite ones (the preview's float) are skipped: see above.
+      if (animation.effect?.getTiming().iterations === Infinity) continue
+      animation.finish()
+    }
+  }
+  document.startViewTransition = ((update?: () => void | Promise<void>) => {
+    finishFinite()
+    requestAnimationFrame(finishFinite)
+    running++
+    tell()
+    const transition = original(update)
+    transition.finished.finally(() => {
+      running--
+      tell()
+    })
+    return transition
+  }) as typeof document.startViewTransition
+}
+

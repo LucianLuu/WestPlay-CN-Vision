@@ -39,6 +39,10 @@ export function useDemo(): {
       if (data?.channel !== DEMO_CHANNEL) return
       if (data.type === 'ready') setReady(true)
       if (data.type === 'route') setRoute(data.route)
+      // The preview's own life, passed on to the host: it is the only thing that can tell a page
+      // whose renderer Edge WebView2 158 has killed from one that is working (the browser process
+      // stays up either way). See `app/src/main.rs`'s `watch_companion`.
+      if (data.type === 'alive') void call('preview_alive').catch(() => {})
       if (data.type === 'located') {
         waiting.current.get(data.id)?.(data.rect)
         waiting.current.delete(data.id)

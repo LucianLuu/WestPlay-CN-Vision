@@ -2334,14 +2334,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             // `OUTSIDE_METRES`), the screen's drawing only the answer when the game won't say where
             // its camera is — the third-person one often still draws WestPlay's screen, and the sound
             // never went dull (owner 2026-11-19).
-            let metres = camera::Camera::camera_metres(&telemetry);
-            let outside = camera.outside_with_camera(
+            let outside = camera.outside(
                 truck.id.as_str(),
                 cab_drawn,
                 game_frame,
                 electrics,
                 paused,
-                metres,
             );
             if outside != was_outside {
                 was_outside = outside;
