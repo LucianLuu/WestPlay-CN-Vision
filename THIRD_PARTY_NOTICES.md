@@ -326,3 +326,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+---
+
+## Westplay-improved-version (jntm-5686)
+
+以下功能来自 https://github.com/jntm-5686/Westplay-improved-version ：
+
+- **YTHQ 平板屏幕适配** —— `crates/setup/` 的大部分、`crates/setup/assets/patches.zip`
+- **中文输入法候选条** —— `ui/src/cabin/keyboard/InputMethod.tsx`、`ui/public/chinese/pinyin.json`
+- **哔哩哔哩座舱客户端** —— `crates/host/src/bilibili.rs`、`bilibili.js`、`ui/src/cabin/apps/youtube/`
+
+按上游 GPL-3.0-or-later 使用，原样或最小改动并入。感谢 @jntm-5686。

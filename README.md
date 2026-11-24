@@ -154,6 +154,8 @@ QQ 音乐的登录凭证存在本地中间层的账号池里，不经过 WestPla
 
 - **[enes-less/WestPlay](https://github.com/enes-less/WestPlay)** —— 原版，一切的起点（GPL-3.0）
 - **L-1124/QQMusicApi** —— QQ 音乐接口封装与中间层（GPL-3.0）
+- **[@jntm-5686](https://github.com/jntm-5686) / [Westplay-improved-version](https://github.com/jntm-5686/Westplay-improved-version)** ——
+  YTHQ 平板屏幕适配、中文输入法候选条、哔哩哔哩座舱客户端（三块的主要代码都来自这里）
 - **@lingbz112** WestPlayCN项目提供空间音频适配
 - **@GooseLLL** 提供 Apple 风格图标包
 - 所有帮忙测试、报 bug 的玩家
