@@ -178,6 +178,58 @@ fn ours_is_serving(port: u16) -> bool {
 ///
 /// `None` when the layer can't be reached: it's just starting, or it has gone. Deliberately forgiving — a
 /// layer that isn't up must not keep the host from drawing the rest of the cabin.
+/// Hands the account's cookie to the layer (`POST /api/signin/cookie`): the sign-in window's
+/// page is where it was signed in, and the layer is what plays from that account.
+/// Tells the layer to forget the account (`POST /api/signout`): the cabin's app stops playing
+/// as it, and the next start has no account.
+/// A `POST` with no body, answered as text.
+fn post_empty(port: u16, path: &str) -> Result<String, String> {
+    use std::io::{Read, Write};
+
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))
+        .map_err(|error| error.to_string())?;
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let mut answer = String::new();
+    stream
+        .read_to_string(&mut answer)
+        .map_err(|error| error.to_string())?;
+    Ok(answer.split("\r\n\r\n").nth(1).unwrap_or("").to_owned())
+}
+
+pub fn post_signout(port: u16) -> Result<String, String> {
+    post_empty(port, "/api/signout")
+}
+
+pub fn post_cookie(port: u16, cookie: &str) -> Result<String, String> {
+    use std::io::{Read, Write};
+
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))
+        .map_err(|error| error.to_string())?;
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let body = serde_json::json!({ "cookie": cookie }).to_string();
+    let request = format!(
+        "POST /api/signin/cookie HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let mut answer = String::new();
+    stream
+        .read_to_string(&mut answer)
+        .map_err(|error| error.to_string())?;
+    Ok(answer.split("\r\n\r\n").nth(1).unwrap_or("").to_owned())
+}
+
 pub fn health(port: u16) -> Option<(bool, String)> {
     use std::io::{Read, Write};
 

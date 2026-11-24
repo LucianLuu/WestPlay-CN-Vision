@@ -6,7 +6,7 @@
 //! This is the read-only slice first: home (recommend playlists + new songs), search, a playlist's page and
 //! lyrics. Playing (stream URLs through the pool credential, an `<audio>` element here) lands in a later slice.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -449,6 +449,10 @@ pub enum Report {
 pub struct QqMusic {
     view: OffscreenWebView,
     pending: RefCell<Vec<Report>>,
+    /// Whether its page last said the account is signed in (`None`: it hasn't said yet this
+    /// run). The reports below are taken each pass, so the answer is kept here as well, for the
+    /// companion's accounts page to ask (`signed_in`).
+    signed_in: Cell<Option<bool>>,
     /// The app's questions not answered yet: asked again as the page is ready anew.
     unanswered: RefCell<Unanswered>,
     /// Persisted session cookie waiting for the hidden page to finish loading, then handed to it.
@@ -508,6 +512,7 @@ impl QqMusic {
         Ok(Self {
             view,
             pending: RefCell::new(Vec::new()),
+            signed_in: Cell::new(None),
             unanswered: RefCell::default(),
             user_data: user_data.to_owned(),
             last_volume: RefCell::new(read_volume(user_data)),
@@ -668,9 +673,20 @@ impl QqMusic {
         *self.restore_cookie.borrow_mut() = Some(cookies);
     }
 
+    /// Whether its page says the account is signed in (`None`: it hasn't said yet this run).
+    /// The companion's accounts page asks this, rather than remembering last run's answer.
+    pub fn signed_in(&self) -> Option<bool> {
+        self.signed_in.get()
+    }
+
     /// What the page said since the last call.
     pub fn take_reports(&self) -> Vec<Report> {
         let mut reports = std::mem::take(&mut *self.pending.borrow_mut());
+        for report in &reports {
+            if let Report::State(state) = report {
+                self.signed_in.set(Some(state.signed_in));
+            }
+        }
         for message in self.view.take_page_messages() {
             match read_message(&message) {
                 Some(Message::Ready) => {
@@ -796,8 +812,7 @@ fn read_message(message: &str) -> Option<Message> {
     serde_json::from_value::<State>(value).ok().map(Message::State)
 }
 
-/// `{"type":"qqMusic","signedIn":…,"playing":…,"avatar":…}` for the cabin page (`null` when QQ Music isn't running).
-pub fn state_message(state: Option<&State>) -> String {
+    pub fn state_message(state: Option<&State>) -> String {
     serde_json::json!({
         "type": "qqMusic",
         "signedIn": state.map(|s| s.signed_in),

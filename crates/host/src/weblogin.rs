@@ -197,6 +197,7 @@ impl WebLogins {
         }
     }
 
+
     /// Carries out the companion's request: its sign-in page in a window on the desktop, or its page to sign out
     /// on. A window already open is brought to the front. `environment` is the site's page running in the cabin
     /// (WebView2's own page cookies then, no second environment on its profile), where it is.
@@ -287,6 +288,15 @@ impl WebLogins {
     /// The cookie string captured when `which` signed in last this run (`None`: none taken yet).
     pub fn take_cookies(&self, which: Site) -> Option<String> {
         self.last_cookies[which.index()].borrow_mut().take()
+    }
+
+    /// Tells `which`'s answer from somewhere else: Bilibili's own client knows whether its page
+    /// is signed in (`bilibili.rs`), and the companion's accounts page shows what this says.
+    /// Kept for the next start too, as a sign-in here is.
+    pub fn tell_signed_in(&self, which: Site, signed_in: bool) {
+        let index = which.index();
+        self.signed_in[index].set(signed_in);
+        self.asked[index].set(true);
     }
 
     /// The three, as the companion shows them.

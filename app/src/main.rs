@@ -201,6 +201,23 @@ fn spotify_check(accounts: State<Accounts>) {
 }
 
 /// Opens Apple's sign-in for Apple Music in a window on the desktop (the status then says when it's done).
+/// Asks Bilibili's client whether its page is signed in. Its page says so as it loads, so
+/// this only has to be sure the client is running; nothing opens on the desktop.
+#[tauri::command]
+fn bilibili_check(accounts: State<Accounts>) {
+    accounts.0.bilibili.request(AccountAction::Check);
+}
+
+#[tauri::command]
+fn netease_check(accounts: State<Accounts>) {
+    accounts.0.netease.request(AccountAction::Check);
+}
+
+#[tauri::command]
+fn qq_music_check(accounts: State<Accounts>) {
+    accounts.0.qq_music.request(AccountAction::Check);
+}
+
 #[tauri::command]
 fn bilibili_sign_in(accounts: State<Accounts>) {
     accounts.0.bilibili.request(AccountAction::SignIn);
@@ -531,6 +548,9 @@ fn main() {
             setup::uninstall_from_game,
             setup::remove_data,
             setup::leave_pc,
+            bilibili_check,
+            netease_check,
+            qq_music_check,
             bilibili_sign_in,
             netease_sign_in,
             qq_music_sign_in,

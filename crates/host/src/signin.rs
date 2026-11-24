@@ -80,6 +80,18 @@ pub const YOUTUBE: Site = Site {
 /// YouTube's), coming back to YouTube, which sets them.
 pub const YOUTUBE_MUSIC: Site = Site { title: "Sign in to YouTube Music - WestPlay", ..YOUTUBE };
 
+/// Bilibili's sign-in, in its own page and back to its home (bilibili.rs): the site keeps the
+/// session in its own cookies there, and the hidden player's profile is where they are read.
+pub const BILIBILI: Site = Site {
+    sign_in: "https://passport.bilibili.com/login",
+    title: "Sign in to Bilibili - WestPlay",
+    home: "https://www.bilibili.com/",
+    not_yet: None,
+    page_says: None,
+    cookie_origins: &["https://www.bilibili.com/", "https://passport.bilibili.com/"],
+    signing_out: false,
+};
+
 /// Spotify's sign-in, coming back to its web player.
 pub const SPOTIFY: Site = Site {
     sign_in: "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F",

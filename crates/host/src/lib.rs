@@ -6,6 +6,7 @@
 #[macro_use]
 pub mod log;
 mod apple_music;
+mod bilibili;
 pub mod browser;
 mod brightness;
 mod camera;
@@ -534,6 +535,15 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut typing_state: Option<westplay_shared::TypingState> = None;
     // YouTube's player, while the page uses it, and how it last played (sent again when the page reloads).
     let mut youtube: Option<youtube::YouTube> = None;
+    // Bilibili's player, the same shape: its own hidden page (bilibili.com), its own WebView2
+    // profile (its cookies are Bilibili's, apart from YouTube's), its own reports and answers,
+    // drawn by the YouTube app's own page.
+    let mut bilibili: Option<bilibili::Bilibili> = None;
+    let mut bilibili_message: Option<String> = None;
+    let mut bilibili_account_message: Option<String> = None;
+    let mut bilibili_was_playing = false;
+    let mut bilibili_log = play_log::PlayLog::new("bilibili");
+    let mut bilibili_stuck = play_log::Stuck::default();
     // Whether the game's camera is outside the cab (YouTube's sound muffled then), and the player's camera
     // settings in the game (it turns with the steering).
     let mut camera = camera::Camera::default();
@@ -560,6 +570,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut spotify_signing_in = false;
     // Each service's sign-in confirming after its window closed signed in (youtube.rs, spotify.rs).
     let (mut youtube_window_open, mut youtube_confirming) = (false, false);
+    let (mut bilibili_window_open, mut bilibili_confirming) = (false, false);
     let mut spotify_confirming = false;
     let mut spotify_playback: Option<String> = None;
     // Apple Music's web player, the same way.
@@ -741,7 +752,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         // The companion's Bilibili, NetEase Cloud Music and QQ Music sign-ins: their own pages in a window on the
         // desktop, on the profiles the apps in the cab show them on (weblogin.rs).
         for (request, which) in [
-            (&config.accounts.bilibili, weblogin::Site::Bilibili),
+            // Bilibili is *not* here: its app is the client of its own (bilibili.rs), on a
+            // WebView2 profile of its own (`webview2-bilibili`), and signing in on another profile
+            // would leave the cookies where the player's page never looks. Its account commands
+            // go to that client, below.
             (&config.accounts.netease, weblogin::Site::Netease),
             (&config.accounts.qq_music, weblogin::Site::QqMusic),
         ] {
@@ -783,9 +797,40 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     };
                     log!("[qq music] signed out: its session cleared ({cleared:?})");
                 }
+                // Asked without the player having asked (the companion's accounts page
+                // opening): QQ Music's page is the one that knows whether the account is
+                // signed in, so a page of its own that isn't running has to be started — its
+                // reports then say it, and the companion shows what they say. Nothing opens on
+                // the desktop for a look.
+                if action == AccountAction::Check && which == weblogin::Site::QqMusic {
+                    let _ = start_qq_music(&mut qq_music, &stage, &config, qq_layer::serving_port());
+                }
                 web_logins.command(which, action, open_in.as_ref());
             }
         }
+        // Bilibili's account commands go to its own client, whose page is the one that holds the
+        // session (`bilibili.rs`, its `Command::SignIn` / `SignOut`).
+        if let Some(action) = config.accounts.bilibili.take() {
+            match action {
+                // Asked without the player having asked (the companion's accounts page opening):
+                // its page says whether it's signed in by itself, so only a page that isn't
+                // running needs starting — no window on the desktop for a look.
+                AccountAction::Check => {
+                    let _ = start_bilibili(&mut bilibili, &stage, &config);
+                }
+                AccountAction::SignIn => {
+                    if let Some(player) = start_bilibili(&mut bilibili, &stage, &config) {
+                        let _ = player.command(&bilibili::Command::SignIn);
+                    }
+                }
+                AccountAction::SignOut => {
+                    if let Some(player) = start_bilibili(&mut bilibili, &stage, &config) {
+                        let _ = player.command(&bilibili::Command::SignOut);
+                    }
+                }
+            }
+        }
+
         // Signed in: the app's page loads again, signed in as its window now is.
         for (which, done) in web_logins.take_reports() {
             if done == weblogin::Done::SignedIn
@@ -804,6 +849,37 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         .map_err(|error| error.to_string()),
                 };
                 log!("[qq music] signed out: its player forgot the account ({cleared:?})");
+            }
+            // Signed out of NetEase Cloud Music: its layer forgets the account too, or the cab
+            // went on playing as the account the player just left.
+            if done == weblogin::Done::SignedOut && which == weblogin::Site::Netease {
+                if let Some(port) = netease_layer::PORTS
+                    .iter()
+                    .copied()
+                    .find(|&port| netease_layer::health(port).is_some())
+                {
+                    let cleared = netease_layer::post_signout(port);
+                    log!("[netease] signed out: its layer forgot the account ({cleared:?})");
+                }
+            }
+            // NetEase Cloud Music's layer: its sign-in window's cookie goes to the layer, which
+            // is what the cab's app actually plays from (`netease_layer`, POST /api/signin/cookie).
+            // Without this the window signed in and the layer went on as nobody.
+            if done == weblogin::Done::SignedIn && which == weblogin::Site::Netease {
+                let taken = web_logins.take_cookies(weblogin::Site::Netease);
+                log!(
+                    "[netease] signed in: cookies {}",
+                    taken.as_deref().map_or("none".to_owned(), |c| format!("{} chars", c.len()))
+                );
+                if let Some(cookies) = taken
+                    && let Some(port) = netease_layer::PORTS
+                        .iter()
+                        .copied()
+                        .find(|&port| netease_layer::health(port).is_some())
+                {
+                    let posted = netease_layer::post_cookie(port, &cookies);
+                    log!("[netease] cookie posted: {posted:?}");
+                }
             }
             // QQ Music's own player: its sign-in window's cookies go to its hidden page, which
             // re-sends them to the layer (its account pool then has them: qq_music.rs's `apply_cookies`).
@@ -830,7 +906,37 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 }
             }
         }
+        // The three sites, asked rather than remembered: each app knows from its own page
+        // (Bilibili's and QQ Music's report it as they load, NetEase's layer answers its
+        // `/api/health`), and every answer is a live one. Nothing is kept between runs —
+        // a file that says "signed in" outlives the session it was written for, and the
+        // companion showed "Sign in" for an account signed in all along ... or worse, the
+        // other way round (owner 2026-11-24).
         status.web_logins = web_logins.state();
+        {
+            let mut now = status.web_logins;
+            // Bilibili's page, through its own client: it reports as the page loads.
+            if let Some(player) = &bilibili {
+                if let Some(signed_in) = player.signed_in() {
+                    now.bilibili.signed_in = Some(signed_in);
+                }
+            }
+            // QQ Music's page, through its own client: it reports as the page loads.
+            if let Some(player) = &qq_music {
+                if let Some(signed_in) = player.signed_in() {
+                    now.qq_music.signed_in = Some(signed_in);
+                }
+            }
+            // NetEase's layer, which answers `/api/health` with it.
+            if let Some((_port, signed_in, _nickname)) = netease_layer::PORTS
+                .iter()
+                .copied()
+                .find_map(|port| netease_layer::health(port).map(|health| (port, health.0, health.1)))
+            {
+                now.netease.signed_in = Some(signed_in);
+            }
+            status.web_logins = now;
+        }
 
         // Checked often so the game is picked up right away when it starts or switches GPU.
         if last_check.elapsed() >= Duration::from_millis(200) {
@@ -1418,6 +1524,31 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         }
                     }
                 }
+                Some(PageMessage::Bilibili { command }) => {
+                    if command == bilibili::Command::Close {
+                        if let Some(closing) = bilibili.take() {
+                            closing.close(&stage);
+                        }
+                        bilibili_message = None;
+                        let _ = webview.post_json(&bilibili::state_message(None));
+                    } else if bilibili.is_none() && matches!(command, bilibili::Command::Hide) {
+                        // Nothing to hide: Bilibili isn't running (a page reloading says it anyway).
+                    } else {
+                        // One picture at a time: Bilibili's own takes the place YouTube's had (its
+                        // site unreachable here, YouTube's error page would show through the cabin
+                        // page's picture).
+                        if matches!(
+                            command,
+                            bilibili::Command::Show { .. } | bilibili::Command::Load { .. }
+                        ) && let Some(other) = &youtube
+                        {
+                            let _ = other.command(&youtube::Command::Hide);
+                        }
+                        if let Some(player) = start_bilibili(&mut bilibili, &stage, &config) {
+                            let _ = player.command(&command);
+                        }
+                    }
+                }
                 Some(PageMessage::Spotify { command }) => {
                     if spotify.is_none() && matches!(command, spotify::Command::Pause) {
                         // Nothing to pause: Spotify isn't running.
@@ -1748,6 +1879,79 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 following = None;
             }
         }
+
+        // How Bilibili's player plays, for the page (the YouTube app's own page draws it); its
+        // WebView failing closes it (the page opens it again).
+        if let Some(player) = &bilibili {
+            if player.failed() || players_closing {
+                if players_closing {
+                    log!("[bilibili] closed with the game");
+                } else {
+                    log!("[bilibili] its browser failed: closed, the page opens it again");
+                }
+                if let Some(line) = bilibili_log.heard(None) {
+                    log!("{line}");
+                }
+                if let Some(failed) = bilibili.take() {
+                    failed.close(&stage);
+                }
+                bilibili_message = None;
+                let _ = webview.post_json(&bilibili::state_message(None));
+            } else {
+                let mut state = None;
+                for report in player.take_reports() {
+                    match report {
+                        bilibili::Report::Spectrum(bars) => {
+                            let _ = webview.post_json(&speakers::spectrum_message(&bars));
+                        }
+                        bilibili::Report::Answer(answer) => {
+                            let _ = webview.post_json(&bilibili::answer_message(&answer));
+                        }
+                        bilibili::Report::Account(account) => {
+                            let message = bilibili::account_message(&account);
+                            let _ = webview.post_json(&message);
+                            bilibili_account_message = Some(message);
+                            // The companion's accounts page shows what this says, and Bilibili's
+                            // own client is the one that knows: its page has the session.
+                            web_logins.tell_signed_in(weblogin::Site::Bilibili, account.signed_in);
+                        }
+                        bilibili::Report::SignInWindow(open) => {
+                            let _ = webview.post_json(&bilibili::sign_in_message(open));
+                            bilibili_window_open = open;
+                        }
+                        bilibili::Report::Confirming(confirming) => {
+                            bilibili_confirming = confirming;
+                        }
+                        bilibili::Report::State(latest) => {
+                            let heard = bilibili_heard(&latest);
+                            let loading = heard.doing == play_log::Doing::Loading;
+                            if let Some(line) = bilibili_log.heard(Some(heard)) {
+                                log!("{line}");
+                            }
+                            if bilibili_stuck.heard(latest.video.as_deref(), loading, Instant::now()) {
+                                let video = latest.video.as_deref().unwrap_or("?");
+                                log!(
+                                    "[bilibili] {video} still loading after {} s",
+                                    play_log::STUCK_AFTER.as_secs()
+                                );
+                            }
+                            if bilibili_was_playing && latest.state == 3 {
+                                let video = latest.video.as_deref().unwrap_or("?");
+                                log!("[bilibili] {video} stopped to buffer at {:.1} s", latest.time);
+                            }
+                            bilibili_was_playing = latest.state == 1;
+                            state = Some(latest);
+                        }
+                    }
+                }
+                if let Some(state) = state {
+                    let message = bilibili::state_message(Some(&state));
+                    let _ = webview.post_json(&message);
+                    bilibili_message = Some(message);
+                }
+            }
+        }
+
 
         // How YouTube's player plays, for the page; its WebView failing closes it (the page opens it again).
         if let Some(player) = &youtube {
@@ -3039,6 +3243,17 @@ fn game_shown_message(shown: bool) -> String {
     serde_json::json!({ "type": "gameShown", "shown": shown }).to_string()
 }
 
+/// What Bilibili's player does, for the log (play_log.rs), from its state (-1 unstarted, 0 ended,
+/// 1 playing, 2 paused, 3 buffering, 5 cued).
+fn bilibili_heard(state: &bilibili::State) -> play_log::Heard<'_> {
+    let doing = match state.state {
+        1 => play_log::Doing::Playing,
+        3 | -1 => play_log::Doing::Loading,
+        _ => play_log::Doing::Paused,
+    };
+    play_log::Heard { doing, track: state.video.as_deref(), position: state.time }
+}
+
 /// What YouTube's player does, for the log (play_log.rs), from its state (-1 unstarted, 0 ended, 1 playing,
 /// 2 paused, 3 buffering, 5 cued).
 fn youtube_heard(state: &youtube::State) -> play_log::Heard<'_> {
@@ -3048,6 +3263,27 @@ fn youtube_heard(state: &youtube::State) -> play_log::Heard<'_> {
         _ => play_log::Doing::Paused,
     };
     play_log::Heard { doing, track: state.video.as_deref(), position: state.time }
+}
+
+/// Bilibili's player, started as the page first asks for it (on a WebView2 profile of its own),
+/// or `None` if it couldn't start (the page says so).
+fn start_bilibili<'a>(
+    bilibili: &'a mut Option<bilibili::Bilibili>,
+    stage: &Stage,
+    config: &Config,
+) -> Option<&'a bilibili::Bilibili> {
+    if bilibili.is_none() {
+        // A profile of its own: Bilibili's cookies are Bilibili's, apart from YouTube's.
+        let user_data = config.data_dir.join("webview2-bilibili");
+        match bilibili::Bilibili::start(stage, config.width, config.height, &user_data) {
+            Ok(started) => {
+                log!("[bilibili] opened");
+                *bilibili = Some(started)
+            }
+            Err(e) => startup::mark(&format!("host: Bilibili couldn't start: {e}")),
+        }
+    }
+    bilibili.as_ref()
 }
 
 /// YouTube, started as it's first needed (on the profile the cabin page's WebView uses), or `None` if it
@@ -3415,6 +3651,8 @@ enum PageMessage {
     CursorArea { area: cursor::Area },
     /// A command for YouTube's player (`youtube`): what to play, where it shows, and so on.
     Youtube { command: youtube::Command },
+    /// A command for Bilibili's player (`bilibili`): what to play, where it shows, and so on.
+    Bilibili { command: bilibili::Command },
     /// A command for Spotify's web player (`spotify`): its sign-in, a question, its controls.
     Spotify { command: spotify::Command },
     /// A command for Apple Music's web player (`appleMusic`): its sign-in, a question, its controls.
