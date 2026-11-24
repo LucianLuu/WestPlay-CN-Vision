@@ -144,11 +144,16 @@ export function installDemo(): void {
     route = now
     report({ type: 'route', route })
   })
-  // Still here, once a second. Edge WebView2 158's STATUS_BREAKPOINT takes this page's renderer
-  // out while the browser process around it stays up, so a process list can't tell it from a
-  // working page; a beat that stops can, and the companion reloads the Setup when it does
-  // (`useDemo.ts`, then `app/src/main.rs`'s `watch_companion`). The window's own timers keep
-  // running while it's behind or minimised, so a backgrounded window is not read as dead.
+  // Still here, once a second, and once now. Edge WebView2 158's STATUS_BREAKPOINT takes this
+  // page's renderer out while the browser process around it stays up, so a process list can't
+  // tell it from a working page; a beat that stops can, and the companion reloads the Setup when
+  // it does (`useDemo.ts`, then `app/src/main.rs`'s `watch_companion`). The window's own timers
+  // keep running while it's behind or minimised, so a backgrounded window is not read as dead.
+  //
+  // The first beat is sent at once: the host only starts watching after it has heard one (a
+  // window whose setup was never opened has no preview to lose), and waiting a second for it
+  // left that second uncovered.
+  report({ type: 'alive' })
   window.setInterval(() => report({ type: 'alive' }), 1000)
 }
 

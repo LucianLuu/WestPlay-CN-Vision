@@ -309,7 +309,6 @@ fn watch_companion(app: tauri::AppHandle) {
     const PREVIEW_SILENT: u64 = 6;
 
     std::thread::spawn(move || {
-        let mut known: Option<Vec<u32>> = None;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(1500));
             let Some(window) = app.get_webview_window("main") else { return };
@@ -317,43 +316,40 @@ fn watch_companion(app: tauri::AppHandle) {
                 // The window gone is the app closing: nothing left to watch.
                 return;
             }
-            let mut lost = None;
-            // 只看 WebView2 的**浏览器**进程：渲染进程随播放器页面开关而起落是正常的，
-            // 把它们算进来会让主窗口在别的页面关闭时被误判成崩溃而重载。
-            let now = westplay_host::page_host_processes();
-            if let Some(before) = &known {
-                let gone: Vec<u32> = before.iter().copied().filter(|id| !now.contains(id)).collect();
-                if !gone.is_empty() && !now.is_empty() {
-                    lost = Some(format!(
-                        "the page's process {} went",
-                        gone.iter().map(u32::to_string).collect::<Vec<_>>().join(", ")
-                    ));
-                }
-            }
-            known = Some(now);
 
-            // The preview's page, by its heartbeat: Edge WebView2 158's STATUS_BREAKPOINT kills
-            // the renderer and leaves the browser process up, so the list above never moves.
+            // **One signal: the preview's heartbeat.** Nothing else here.
+            //
+            // Watching WebView2 browser processes was tried and doesn't work: the list holds
+            // *every* browser under the app, and each sign-in window and hidden player has one
+            // of its own. Closing any of them took a browser out of the list, which read as the
+            // companion's page dying — the window reloaded itself every time a player closed the
+            // sign-in sheet they had just opened (owner 2026-11-24), and before that whenever a
+            // player closed (2026-11-23, "the main window keeps refreshing").
+            //
+            // The heartbeat has neither problem. The preview lives *inside* the companion's page,
+            // so that page dying stops it; a sign-in window or a player closing changes nothing
+            // about it. It also catches the case processes cannot: Edge WebView2 158's
+            // STATUS_BREAKPOINT kills the renderer and leaves the browser process up.
+            //
             // Only once it has beaten at least once — a window still loading its Setup, or one
             // whose setup was never opened, has no preview to lose.
             let beat = PREVIEW_BEAT.load(Ordering::Acquire);
-            if lost.is_none() && beat > 0 {
-                let now_secs = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|since| since.as_secs())
-                    .unwrap_or(0);
-                if now_secs.saturating_sub(beat) > PREVIEW_SILENT {
-                    lost = Some(format!(
-                        "the preview stopped answering {}s ago",
-                        now_secs.saturating_sub(beat)
-                    ));
-                    // Put back to 0: the beat that comes with the reloaded page starts it again,
-                    // and until then a second reload of a page that is still loading is no help.
-                    PREVIEW_BEAT.store(0, Ordering::Release);
-                }
+            if beat == 0 {
+                continue;
             }
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_secs())
+                .unwrap_or(0);
+            let silent = now.saturating_sub(beat);
+            if silent <= PREVIEW_SILENT {
+                continue;
+            }
+            // Put back to 0: the beat that comes with the reloaded page starts it again, and
+            // until then a second reload of a page that is still loading is no help.
+            PREVIEW_BEAT.store(0, Ordering::Release);
 
-            if let Some(why) = lost {
+            {
                 // Where the page should be: what it was showing, or the Setup's own address.
                 // Where the Setup lives: on Windows Tauri serves the bundled page from
                 // `http://tauri.localhost/` (its `wry` workaround for `tauri://localhost`). Falling
@@ -370,7 +366,9 @@ fn watch_companion(app: tauri::AppHandle) {
                         tauri::Url::parse("http://tauri.localhost/index.html")
                             .expect("the Setup's own address")
                     });
-                westplay_host::log!("[companion] {why}; going back to {address}");
+                westplay_host::log!(
+                    "[companion] the preview stopped answering {silent}s ago; going back to {address}"
+                );
                 let _ = window.navigate(address);
             }
         }
