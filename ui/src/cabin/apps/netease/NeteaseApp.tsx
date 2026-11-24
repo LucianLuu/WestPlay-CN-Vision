@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { useKeyboard } from '../../keyboard/store'
 import { useText } from '../../state/text'
 import { Mine } from './account'
-import { BackGlyph, ChartsGlyph, MineGlyph, NeteaseGlyph, PlaylistGlyph, RecommendGlyph } from './glyphs'
+import { BackGlyph, ChartsGlyph, MineGlyph, PlaylistGlyph, RecommendGlyph } from './glyphs'
 import { followLayerPort } from './layer'
 import { MiniPlayer, NowPlaying } from './NowPlaying'
 import {
@@ -87,7 +87,8 @@ export function NeteaseApp() {
           </button>
         ) : (
           <span className="ne-brand" aria-hidden="true">
-            <NeteaseGlyph />
+            {/* 官方标志的图片版（owner 2026-11-23）：glyph 画不出网易云那个红色的圆标。 */}
+            <img src="/icons/westplay/netease-mark.png" alt="" draggable={false} />
           </span>
         )}
         <nav className={typing ? 'ne-tabs away' : 'ne-tabs'} aria-hidden={typing}>

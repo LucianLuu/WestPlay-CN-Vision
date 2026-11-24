@@ -230,16 +230,17 @@
 
 .ne-app .ne-brand {
   flex: none;
-  width: var(--ne-height);
+  width: 66px;
   height: var(--ne-height);
   display: grid;
   place-items: center;
-  color: var(--ne-red);
 }
 
-.ne-app .ne-brand svg {
-  width: 38px;
-  height: 38px;
+/* 官方标志：整块 62px，按比例放进去（owner 2026-11-23 的图标就是这样）。 */
+.ne-app .ne-brand img {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
 }
 
 .ne-app .ne-round {
@@ -1181,14 +1182,18 @@
 /* The words' ink, from what they sit on: the page reads the cover (contrast.ts's `useWordsOver`) and says
    which side they belong on. White on a pale cover was lost (owner 2026-11-20); the switch is the same one
    the cursor and Apple Music's glass make. Attributed on the page itself, so everything inside follows. */
+/* 全屏播放页和歌词页的字一律白（owner 2026-11-23）：底是封面放大再压一层暗色，
+   一直是暗的，深色字在上面看不清。`data-words` 那套按封面平均色挑深/浅字的判定
+   在这页不成立 —— 封面偏亮的歌（截图里那首）会挑到 `#121212`，字就沉进背景里了。
+   所以这条属性还在（别处还读它），只是不再决定这页字的颜色。 */
 .ne-app .ne-now {
   --ne-ink: #fff;
-  --ne-ink-dim: var(--ne-on-colour);
+  --ne-ink-dim: rgb(255 255 255 / 0.72);
 }
 
 .ne-app .ne-now[data-words='light'] {
-  --ne-ink: #121212;
-  --ne-ink-dim: rgb(18 18 18 / 0.72);
+  --ne-ink: #fff;
+  --ne-ink-dim: rgb(255 255 255 / 0.72);
 }
 
 .ne-app .ne-now {
@@ -1711,7 +1716,7 @@
   /* The words take the app's own ink rather than a fixed white: Now Playing's wash is light in the light
      appearance, and white words over it were invisible there (the owner's dark-mode report). */
   color: var(--ne-ink);
-  opacity: 0.3;
+  opacity: 0.45;
   transition:
     opacity 0.45s ease,
     color 0.45s ease;
