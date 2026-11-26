@@ -3,6 +3,14 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 3.0.2 (2026-11-26)
+
+### 修复
+
+- **QQ 音乐的歌单播到第 31 首就回到第 1 首** —— 列表能完整显示，但播放时只认得前 30 首。
+  两个原因：一是应用按 id 向层要歌单时，层的查询写死了 `num=30`；二是应用点歌单里的歌时
+  只把 id 交给播放器，让它自己去查。现在应用把自己已经拿到的整张列表直接交给播放器。
+
 ## 3.0.1 (2026-11-25)
 
 ### 新功能
