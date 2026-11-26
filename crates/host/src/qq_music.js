@@ -1256,16 +1256,18 @@
     // (asking made the id go on as a song's mid, which the layer answers 101404 for).
     if (text === 'qqdaily') return (await fetchRadar()).map((song) => song?.mid).filter(Boolean)
     const numeric = /^\d+$/.test(text)
-    const route =
+    // The whole list, not its first page: `num=30` was written in here, so playing a playlist by
+    // id gave the layer a queue of 30 songs and Next went back to the first one (owner 2026-11-26).
+    // `fetchAllSongs` walks the pages, which is what the app's own lists already use.
+    const path =
       kind === 'top'
-        ? `/top/${encodeURIComponent(text)}/detail?num=30`
+        ? `/top/${encodeURIComponent(text)}/detail`
         : numeric
-          ? `/songlist/${encodeURIComponent(text)}/detail?num=30`
+          ? `/songlist/${encodeURIComponent(text)}/detail`
           : kind === 'artist'
-            ? `/singer/${encodeURIComponent(text)}/songs?num=30`
-            : `/album/${encodeURIComponent(text)}/songs?num=30`
-    const found = await get(route)
-    const songs = found.songs ?? found.song_list ?? []
+            ? `/singer/${encodeURIComponent(text)}/songs`
+            : `/album/${encodeURIComponent(text)}/songs`
+    const { songs } = await fetchAllSongs(path, numeric || kind === 'top' ? 'songs' : 'song_list')
     return songs.map((song) => song?.mid).filter(Boolean)
   }
 

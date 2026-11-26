@@ -217,12 +217,19 @@ export function playFrom(
   const shuffled = shuffle ?? was?.shuffle ?? false
   const start = index ?? (shuffled ? Math.floor(Math.random() * tracks.length) : 0)
   if (isInHost()) {
-    const list = !context
+    // The whole list, always — `songs` with the index into it — and the context's id too when
+    // there is one (the page shows its name and picture).
+    //
+    // It used to send only `id` + `kind` for a playlist, and the layer looked the list up itself:
+    // it answers the first 30 songs and stops, so a player's queue ended at the 30th and Next went
+    // back to the first (owner 2026-11-26). The layer's own paging can't be fixed here — its
+    // `/songlist/{id}/detail` never says how long a list is — but the app already has every song
+    // it shows, so it hands them over instead.
+    // `songs` alone, no `id`: the layer takes a list as given, but asked for a playlist by id it
+    // reads the list itself — and stops at 30 (see above).
     qqMusic({
       action: 'play',
-      ...(list
-        ? { songs: tracks.map((track) => track.id) }
-        : { id: context.id, kind: context.kind }),
+      songs: tracks.map((track) => track.id),
       index: start,
       shuffle: shuffled,
     })
