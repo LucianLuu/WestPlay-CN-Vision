@@ -31,7 +31,7 @@ import { buildingFilter, buildingsVisibility, type Canopy, canopiesOver } from '
 import { labelLines, placeLabels } from './labels'
 import { NO_ENTRY_ICON, drawNoEntry, drawPlaceIcon, parsePlaceIcon } from './placeIcons'
 import { type BuildingMeshes, buildingMeshes } from './buildingMeshes'
-import { type RaisedRoads, raisedRoads } from './raisedRoads'
+import { type RaisedRoads, raisedRoads, routeArrowLayer } from './raisedRoads'
 import { cameraBounds, type MapData } from './mapData'
 import { loadView, type SavedView, saveView } from './mapView'
 import { fromLngLat, labelRange, metresBetween, toLngLat } from './projection'
@@ -53,6 +53,7 @@ import {
   splitRoute,
   type Spans,
 } from './route'
+import { nextRouteArrow, ROUTE_ARROW_MAX_OFFSET, routeArrowSpan } from './routeArrow'
 import {
   BUILDING_FLAT_LAYER,
   BUILDING_LAYER,
@@ -130,6 +131,7 @@ interface LiveMap {
   puck: maplibregl.Marker
   /** The roads at their real heights, on a map with them, and how high over the map the puck is drawn, m. */
   raised: RaisedRoads | null
+  showArrow(line: RaisedLine | null): void
   /** The buildings in their real shapes, on a map with them. */
   meshes: BuildingMeshes | null
   puckHeight: number
@@ -146,6 +148,8 @@ interface LiveMap {
     future: Spans
     restAfter: number | null
     headFrom: Point | null
+    /** The first span eligible for the arrow, including crossing an arrow tip between game updates. */
+    arrowSpan: number | null
     /** How high its points are drawn, as of which of `raised`'s tiles, and its stretches over the flat map. */
     heights: Heights
     heightsFor: number | null
@@ -342,6 +346,7 @@ function create(data: MapData, appearance: Appearance): LiveMap {
 
   const raised = data.raised ? raisedRoads(map, data.raised, () => created.painted) : null
   raised?.setShown(useCabin.getState().mapRoads)
+  const showArrow = routeArrowLayer(map, () => created.painted)
   const meshes = data.meshes ? buildingMeshes(map, data.meshes, () => created.painted) : null
   meshes?.setShown(useCabin.getState().mapBuildings)
   const created: LiveMap = {
@@ -349,6 +354,7 @@ function create(data: MapData, appearance: Appearance): LiveMap {
     map,
     element,
     raised,
+    showArrow,
     meshes,
     puckHeight: 0,
     puck,
@@ -1179,8 +1185,12 @@ function syncRoute(target: LiveMap, now: number) {
   // A return span can lie on the same road. Project only onto spans of the current leg.
   const found = truck ? progressOf(shown.active, routeNext, [truck.x, truck.z], facing ?? undefined) : null
   const approach = found && truck && facing ? approachLine(shown.active, found, [truck.x, truck.z], facing) : null
-  target.progress = found && truck && approach ? { ...found, at: [truck.x, truck.z], distance: 0 } : found
-  const progress = target.progress
+  const onRoute = found && found.distance <= ROUTE_ARROW_MAX_OFFSET ? found : null
+  // A route may arrive before a reliable truck position. Draw from the game's next span then, so
+  // its first arrow has the bright line under it from the start.
+  const startSpan = Math.max(0, routeNext - 1)
+  const start = shown.active[startSpan]?.[0]
+  const progress = (approach ? target.progress : onRoute) ?? (start && { span: startSpan, index: 0, at: start, distance: 0 })
   if (!progress && newRoute) {
     rest.setData(NO_LINE)
     head.setData(NO_LINE)
@@ -1188,6 +1198,14 @@ function syncRoute(target: LiveMap, now: number) {
   const redrawActive = progress ? syncActiveRoute(shown, rest, head, progress, approach) : false
   if (redrawActive || redrawFuture) {
     target.raised?.showRoute([...shown.headRaised, ...shown.restRaised], shown.futureRaised)
+  }
+  const arrowSpan = routeArrowSpan(shown.active, routeNext, onRoute)
+  if (target.overview || !route) {
+    shown.arrowSpan = null
+    target.showArrow(null)
+  } else if (redrawActive || redrawFuture || shown.arrowSpan !== arrowSpan) {
+    shown.arrowSpan = arrowSpan
+    target.showArrow(nextRouteArrow(shown.active, route.maneuvers, routeNext, onRoute, shown.heights))
   }
 }
 
@@ -1208,6 +1226,7 @@ function prepareShownRoute(target: LiveMap, route: LiveState['route']): ShownRou
     future,
     restAfter: null,
     headFrom: null,
+    arrowSpan: null,
     heights: new Map(),
     heightsFor: null,
     restRaised: [],
