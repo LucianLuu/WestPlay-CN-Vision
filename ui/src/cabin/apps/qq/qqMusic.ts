@@ -89,8 +89,9 @@ interface QqState {
   favorites: Record<string, boolean>
   /** "Added"/"Favourited": the toast showing. */
   toast: { text: string; id: number } | null
-  /** Signed in to the layer's account (reported by the hidden page); the account's avatar. */
-  signedIn: boolean
+  /** Signed in to the layer's account (reported by the hidden page); the account's avatar. `null` until the
+   * page has said: the bar shows nothing rather than "Sign In" for that first second (owner 2026-11-28). */
+  signedIn: boolean | null
   avatar: string | null
 }
 
@@ -111,12 +112,24 @@ export const useQqMusic = create<QqState>()(() => ({
   playback: null,
   favorites: {},
   toast: null,
-  signedIn: false,
+  signedIn: null,
   avatar: null,
 }))
 
 export function qqMusic(command: QqMusicCommand): void {
   postToHost({ type: 'qqMusic', command })
+}
+
+/** Opens the site's own sign-in window on the desktop (the host's own, as Apple Music's): signed in, its
+ * page reports the account and every page asks again (`receiveState`). */
+export function signIn(): void {
+  if (isInHost()) qqMusic({ action: 'signIn' })
+}
+
+/** Signs the account out: the site's own sign-out window on the desktop, its page's kept session cleared,
+ * and its player back on the cleared profile, signed out (`lib.rs`'s sign-out block). */
+export function signOut(): void {
+  if (isInHost()) qqMusic({ action: 'signOut' })
 }
 
 // --- Questions ---------------------------------------------------------------------------------------------
@@ -414,7 +427,9 @@ export function cycleRepeat(): void {
   showPlayback({ repeat })
 }
 
-/** The hidden page's login state: signed in or not, and the account's avatar (`null` when unknown). */
+/** The hidden page's login state: signed in or not, and the account's avatar (`null` when unknown). An answer
+ * of `null` is "not known yet": the store keeps `null` (the bar then shows neither Sign In nor the account),
+ * while a page that had already said keeps what it said. */
 export function receiveState(signedIn: boolean | null, avatar: string | null): void {
   if (signedIn == null) return
   const before = useQqMusic.getState().signedIn

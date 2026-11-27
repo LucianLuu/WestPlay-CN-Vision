@@ -457,20 +457,21 @@ fn update_settings(settings: Settings, store: State<SettingsStore>, app: AppHand
 fn resources_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
     use tauri::Manager as _;
     let resources = app.path().resource_dir().ok()?;
-    if resources.join("qq-music-layer").is_dir() {
+    // What marks the folder as WestPlay's: the NetEase layer's own folder, which is shipped with
+    // it. This looked for `qq-music-layer` until 2026-11-26, and QQ Music's layer is gone (its page
+    // asks y.qq.com itself now, `qq_music.js`): every caller then found no folder at all, so NetEase's
+    // layer never started and `watch_layers` had nothing to watch, without a word in the log.
+    if resources.join("netease-layer").is_dir() {
         return Some(resources);
     }
     // A development build: beside the executable, then the checkout's own folder.
     let beside = std::env::current_exe().ok()?.parent()?.to_owned();
-    if beside.join("qq-music-layer").is_dir() {
+    if beside.join("netease-layer").is_dir() {
         return Some(beside);
     }
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.to_owned();
-    source.join("qq-music-layer").is_dir().then_some(source)
+    source.join("netease-layer").is_dir().then_some(source)
 }
-
-/// The QQ middle layer, kept alive by the app (its `Drop` ends it when WestPlay does).
-struct QqLayer(std::sync::Mutex<Option<westplay_host::qq_layer::Layer>>);
 
 /// NetEase Cloud Music's middle layer, kept alive by the app the same way: a local would be dropped
 /// at the end of the setup closure, ending the layer with it.
@@ -501,29 +502,6 @@ fn watch_layers(app: tauri::AppHandle) {
         loop {
             std::thread::sleep(EVERY);
             let Some(resources) = resources_folder(&app) else { continue };
-
-            // QQ Music's (`qq_layer.rs`).
-            if let Some(state) = app.try_state::<QqLayer>() {
-                let Ok(mut kept) = state.0.lock() else { continue };
-                let dead = kept.as_mut().is_some_and(|layer| !layer.is_serving());
-                if dead {
-                    if failures >= GIVE_UP_AFTER {
-                        continue;
-                    }
-                    failures += 1;
-                    westplay_host::log!("[qq layer] stopped answering; starting it again");
-                    *kept = westplay_host::qq_layer::Layer::start(
-                        &westplay_host::qq_layer::folder(&resources),
-                    );
-                    westplay_host::log!(
-                        "[qq layer] restarted: {}",
-                        if kept.is_some() { "serving" } else { "no answer yet" }
-                    );
-                    if kept.is_some() {
-                        failures = 0;
-                    }
-                }
-            }
 
             // NetEase Cloud Music's (`netease_layer.rs`).
             if let Some(state) = app.try_state::<NeteaseLayer>() {
@@ -671,21 +649,6 @@ fn main() {
     // The companion's own window, watched as the cab's page is: a page whose process dies is loaded
     // again rather than left as a white window.
     watch_companion(app.handle().clone());
-            // The QQ middle layer: a Python process of WestPlay's own, for QQ Music's page (qq_layer.rs).
-            // Its folder is shipped beside the app; a build without it simply has no QQ Music data.
-            let qq_layer = resources_folder(app.handle()).and_then(|resources| {
-                westplay_host::qq_layer::Layer::start(&westplay_host::qq_layer::folder(&resources))
-            });
-            if let Some(layer) = &qq_layer {
-                westplay_host::startup::mark(&format!(
-                    "app: QQ layer at {}",
-                    layer.folder().display()
-                ));
-            }
-            // Kept by the app for as long as it runs: a local would be dropped at the end of this
-            // setup closure, and its `Drop` ends the layer with it (which it did: the layer served for
-            // a moment and then went).
-            app.manage(QqLayer(std::sync::Mutex::new(qq_layer)));
             // NetEase Cloud Music's layer: the same shape, its own folder and port (`netease_layer.rs`).
             let netease_layer = resources_folder(app.handle()).and_then(|resources| {
                 westplay_host::netease_layer::Layer::start(&westplay_host::netease_layer::folder(&resources))

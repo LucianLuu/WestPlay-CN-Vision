@@ -1069,6 +1069,18 @@ impl OffscreenWebView {
         unsafe { self.webview.PostWebMessageAsJson(&HSTRING::from(json)) }
     }
 
+    /// Runs `script` in the page, now.
+    ///
+    /// How a page that is a whole site of the site's own is reached: the site's own scripts bring
+    /// their own `chrome.webview` handlers, and a message posted to that event was never seen
+    /// (see `qq_music.rs`'s `post_script`, `bilibili.rs`'s `pass_script`).
+    pub fn execute_script(&self, script: &str) -> windows::core::Result<()> {
+        // No handler: whether the script ran is the page's own business, and a command it couldn't
+        // run is one it had nothing to do with.
+        // SAFETY: the WebView is alive as long as `self`; the script lives through the call.
+        unsafe { self.webview.ExecuteScript(&HSTRING::from(script), None) }
+    }
+
     /// Mouse input for the page, at `point` in page pixels (`data`: wheel delta, or which X button).
     pub fn send_mouse(
         &self,

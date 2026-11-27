@@ -35,7 +35,6 @@ pub mod route;
 mod route_change;
 mod safari;
 mod qq_music;
-pub mod qq_layer;
 #[cfg(test)]
 mod gpu_contention;
 pub mod settings;
@@ -591,6 +590,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut qq_music: Option<qq_music::QqMusic> = None;
     // The app's questions that came before its Start: asked again once the page is up.
     let mut qq_music_early: Vec<qq_music::Command> = Vec::new();
+    // Signing out asked for by the app in the cab (not the companion): its page is closed for the sign-out
+    // window, and comes back once the window is done — the app sent its Start once and won't again
+    // (owner 2026-11-28).
+    let mut qq_music_back_after_sign_out = false;
     // NetEase Cloud Music's layer (`netease_layer`): the app starts it, and the host finds the port it
     // came up on. The page asks this host for it, then talks to the layer itself over the loopback.
     let netease = netease_music::Netease::new();
@@ -802,9 +805,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 // signed in, so a page of its own that isn't running has to be started — its
                 // reports then say it, and the companion shows what they say. Nothing opens on
                 // the desktop for a look.
-                if action == AccountAction::Check && which == weblogin::Site::QqMusic {
-                    let _ = start_qq_music(&mut qq_music, &stage, &config, qq_layer::serving_port());
-                }
+                // Not started for a check until 2026-11-26: the page is a whole site now
+                // (`qq_music.rs` loads y.qq.com, not a blank document), and one made at every start
+                // whose rendering competed with the game's cab screen. A page that isn't running
+                // says nothing, and the companion reads that as "not checked yet" — the answer it
+                // showed before the page was there.
+                let _ = &qq_music;
                 web_logins.command(which, action, open_in.as_ref());
             }
         }
@@ -849,6 +855,14 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         .map_err(|error| error.to_string()),
                 };
                 log!("[qq music] signed out: its player forgot the account ({cleared:?})");
+                // The app in the cab asked for the sign-out: its page is back, on the profile the
+                // window just cleared, answering it as nobody (the anonymous feed) — without it the
+                // app kept a spinner on every page, a page it can't start again itself (owner
+                // 2026-11-28).
+                if qq_music_back_after_sign_out {
+                    qq_music_back_after_sign_out = false;
+                    let _ = start_qq_music(&mut qq_music, &stage, &config);
+                }
             }
             // Signed out of NetEase Cloud Music: its layer forgets the account too, or the cab
             // went on playing as the account the player just left.
@@ -1643,8 +1657,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         // that for a page that reloads; here nothing was running yet to ask it).
                         match &command {
                             qq_music::Command::Start => {
-                                let port = qq_layer::serving_port();
-                                if let Some(app) = start_qq_music(&mut qq_music, &stage, &config, port) {
+                                if let Some(app) = start_qq_music(&mut qq_music, &stage, &config) {
                                     let _ = app.command(&command);
                                     for waiting in qq_music_early.drain(..) {
                                         let _ = app.command(&waiting);
@@ -1662,6 +1675,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             qq_music::Command::SignIn => {
                                 config.accounts.qq_music.request(AccountAction::SignIn);
                             }
+                            qq_music::Command::SignOut => {
+                                config.accounts.qq_music.request(AccountAction::SignOut);
+                            }
                             // A control with nothing playing: nothing to tell.
                             _ => {}
                         }
@@ -1675,6 +1691,16 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     // once it's done.
                     if matches!(command, qq_music::Command::SignIn) {
                         config.accounts.qq_music.request(AccountAction::SignIn);
+                    }
+                    // Signed out from the app's own bar: the host's sign-out window (weblogin.rs's
+                    // `QQ_MUSIC_OUT`), and the sign-out block below closes this page and clears what it
+                    // kept — then starts a fresh one on the cleared profile, so the app in the cab is
+                    // never left with no page to answer it (owner 2026-11-28).
+                    if matches!(command, qq_music::Command::SignOut) {
+                        config.accounts.qq_music.request(AccountAction::SignOut);
+                        // Its page is closed for the sign-out (the block above, which clears what it
+                        // kept): this one is back when the window is done.
+                        qq_music_back_after_sign_out = true;
                     }
                 }
                 Some(PageMessage::Safari { command }) => {
@@ -2052,7 +2078,29 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             for report in app.take_reports() {
                 let message = match report {
                     qq_music::Report::State(state) => qq_music::state_message(Some(&state)),
-                    qq_music::Report::Answer(answer) => qq_music::answer_message(&answer),
+                    qq_music::Report::Answer(answer) => {
+                        // What came back, and why if it couldn't: the page's own console isn't in this
+                        // log, so a question that never comes back otherwise only shows as a spinner in
+                        // the cab with nothing said of it here.
+                        let what = if answer.failed {
+                            format!("failed: {}", answer.why.as_deref().unwrap_or("the page gave no reason"))
+                        } else {
+                            [
+                                (answer.home.is_some(), "home"),
+                                (answer.top.is_some(), "top"),
+                                (answer.search.is_some(), "search"),
+                                (answer.collection.is_some(), "collection"),
+                                (answer.lyrics.is_some(), "lyrics"),
+                            ]
+                            .into_iter()
+                            .filter(|(there, _)| *there)
+                            .map(|(_, name)| name)
+                            .collect::<Vec<_>>()
+                            .join("+")
+                        };
+                        log!("[qq music] answered {}: {what}", answer.answer);
+                        qq_music::answer_message(&answer)
+                    }
                     qq_music::Report::Playback(playback) => {
                         qq_music::playback_message(playback.as_deref())
                     }
@@ -3321,12 +3369,10 @@ fn start_qq_music<'a>(
     qq_music: &'a mut Option<qq_music::QqMusic>,
     stage: &Stage,
     config: &Config,
-    // The port the layer answers on (8080 unless something else had it: qq_layer.rs).
-    port: u16,
 ) -> Option<&'a qq_music::QqMusic> {
     if qq_music.is_none() {
         let user_data = config.data_dir.join("webview2-qq-music");
-        match qq_music::QqMusic::start(stage, config.width, config.height, &user_data, port) {
+        match qq_music::QqMusic::start(stage, config.width, config.height, &user_data) {
             Ok(started) => {
                 log!("[qq music] opened");
                 *qq_music = Some(started)

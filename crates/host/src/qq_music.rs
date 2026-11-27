@@ -63,9 +63,6 @@ fn write_session(user_data: &Path, cookies: &str) {
     }
 }
 
-/// The hidden page's empty shell (an opaque `about:blank`-like document; it fetches the local loopback layer).
-const SHELL: &str = "<!doctype html><html><head><meta charset=\"utf-8\"></head><body></body></html>";
-
 /// What the cabin page asks of QQ Music (`qqMusic` in ui/src/shared/host.ts).
 #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "action", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -126,12 +123,17 @@ pub enum Command {
     },
     /// Open the site's own sign-in window on the desktop (handled by the host, not the hidden page).
     SignIn,
+    /// Its own sign-out window, and its player forgetting the account (the host's too: `lib.rs`'s
+    /// sign-out block closes the page, clears the kept session, and starts a fresh one on the cleared
+    /// profile). Asked for by the app's own bar (owner 2026-11-28), as Apple Music's account button is
+    /// (`weblogin.rs`'s `QQ_MUSIC_OUT`).
+    SignOut,
 }
 
 impl Command {
-    /// For the page (all but the host's own: running and opening the sign-in window).
+    /// For the page (all but the host's own: running, and the two sign-in/-out windows).
     fn for_page(&self) -> bool {
-        !matches!(self, Command::Start | Command::SignIn)
+        !matches!(self, Command::Start | Command::SignIn | Command::SignOut)
     }
 }
 
@@ -345,6 +347,10 @@ pub struct Answer {
     pub lyrics: Option<crate::lyrics::Lyrics>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub failed: bool,
+    /// Why the question failed, as the page says it (it sends the site's own error with `failed`): kept
+    /// for the log only — the app shows nothing of it, and the page's console doesn't reach `app.log`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
 }
 
 /// Where a song plays from (as the app asked for it).
@@ -497,18 +503,32 @@ impl QqMusic {
         width: u32,
         height: u32,
         user_data: &Path,
-        port: u16,
     ) -> Result<Self, webview::Error> {
         let view = OffscreenWebView::new(stage, width, height, user_data)?;
         view.log_as("qq music")?;
         view.show(false)?;
         stage.add(&view, false)?;
-        // Where the layer answers: the port it was given (8080 unless something else had it, as Steam's
-        // own browser often does), told before either script runs.
-        view.add_startup_script(&format!("window.__westplayQqBase = 'http://127.0.0.1:{port}';\n"))?;
+        // The site's own page is heavy and none of it is looked at: `qq_quiet.js` stops its
+        // animation, its videos and its pictures, which kept a GPU pass going on the same card the
+        // game's cab screen is drawn on (owner 2026-11-26).
+        view.add_startup_script(include_str!("qq_quiet.js"))?;
+
         // The truck speakers' sound first: the page's script makes its own of it (`cab_sound.js`).
         view.add_startup_script(concat!(include_str!("cab_sound.js"), "\n", include_str!("qq_music.js")))?;
-        view.navigate_to_string(SHELL)?;
+        // A page *on* y.qq.com, not the site's own page: what the script here needs is the site's
+        // origin and its cookie, and `robots.txt` — 336 bytes of text, no scripts, no pictures — has
+        // both and nothing else.
+        //
+        // A blank document (`NavigateToString`) has no origin: the browser refuses every cross-origin
+        // answer and sends no cookie with one, which is why the middle layer existed at all. The
+        // site's own home page (`https://y.qq.com/`) gave the origin, but it came with the whole
+        // site: its own scripts fetching its feed, its banners, its player and its videos, all of it
+        // on the same browser, the same network and the same card as the questions this script asks.
+        // Measured 2026-11-27 with the site's page loaded: `Home` answered 52 s after it, `Collection`
+        // 22 s — the app's own timeout came first, and the cab showed "载入失败" — while the same
+        // questions asked before that page finished loading came back in a second. robots.txt leaves
+        // nothing to compete with, and the origins and CORS rules are the site's own either way.
+        view.navigate("https://y.qq.com/robots.txt")?;
         Ok(Self {
             view,
             pending: RefCell::new(Vec::new()),
@@ -550,14 +570,14 @@ impl QqMusic {
             told.head = Some(head);
             let message = serde_json::to_string(&Cab::Head { head }).unwrap_or_default();
             told.messages[1] = Some(message.clone());
-            self.view.post_json(&message)?;
+            self.post_script(&message)?;
         }
         if told.speakers.as_ref().map(Option::as_deref) != Some(speakers) {
             let speakers = speakers.map(<[_]>::to_vec);
             told.speakers = Some(speakers.clone());
             let message = serde_json::to_string(&Cab::Speakers { speakers }).unwrap_or_default();
             told.messages[0] = Some(message.clone());
-            self.view.post_json(&message)?;
+            self.post_script(&message)?;
         }
         let camera = (outside, if outside { (distance * 4.0).round() / 4.0 } else { 0.0 });
         if told.camera != Some(camera) && camera.1.is_finite() {
@@ -565,19 +585,19 @@ impl QqMusic {
             let message = serde_json::to_string(&Cab::Outside { on: camera.0, distance: camera.1 })
                 .unwrap_or_default();
             told.messages[2] = Some(message.clone());
-            self.view.post_json(&message)?;
+            self.post_script(&message)?;
         }
         if told.equalizer != Some(equalizer) {
             told.equalizer = Some(equalizer);
             let message = serde_json::to_string(&Cab::Equalizer { equalizer }).unwrap_or_default();
             told.messages[3] = Some(message.clone());
-            self.view.post_json(&message)?;
+            self.post_script(&message)?;
         }
         if told.spectrum != Some(spectrum) {
             told.spectrum = Some(spectrum);
             let message = serde_json::to_string(&Cab::Spectrum { on: spectrum }).unwrap_or_default();
             told.messages[4] = Some(message.clone());
-            self.view.post_json(&message)?;
+            self.post_script(&message)?;
         }
         Ok(())
     }
@@ -588,10 +608,10 @@ impl QqMusic {
                 let checked = Command::Ask { id: *id, question: question.clone().checked() };
                 let sent = serde_json::to_string(&checked).unwrap_or_default();
                 self.unanswered.borrow_mut().asked(*id, sent.clone());
-                self.view.post_json(&sent)
+                self.post_script(&sent)
             }
             _ if command.for_page() => {
-                let posted = self.view.post_json(&serde_json::to_string(command).unwrap_or_default());
+                let posted = self.post_script(&serde_json::to_string(command).unwrap_or_default());
                 crate::log!("[qq music] posted {command:?} -> {posted:?}");
                 posted
             }
@@ -599,19 +619,76 @@ impl QqMusic {
         }
     }
 
-    /// Hand the sign-in window's captured cookie string to the hidden page; it re-sends it to the layer as a Cookie header.
+    /// Hand the sign-in window's captured cookie string to the hidden page, and put it in the page's
+    /// own cookie jar.
     pub fn apply_cookies(&self, cookies: &str) -> windows::core::Result<()> {
         // Kept for the next start (the page's own localStorage can't: its document has no origin).
         // The pending copy is cleared by whoever took it (`take_reports`'s Ready branch, which is
         // holding the borrow): clearing it here again would be a second mutable borrow of the same
         // `RefCell`, which panics (the start that crashed as soon as a session was kept).
         write_session(&self.user_data, cookies);
+        // The cookies go into this page's own jar too, not only to the page as a string: it asks the
+        // site's API with `credentials: 'include'`, and only a cookie the browser holds is one the
+        // request actually carries (a script can't set the `Cookie` header). The page's copy is what
+        // tells it the names `document.cookie` hides (`uin` is `HttpOnly` on the site); the jar is
+        // what the site answers with. Without the jar every account's question went out as nobody's,
+        // and "我的" — asked with `uin: '0'` when the number came back empty — was answered `80030`
+        // and couldn't load at all (2026-11-27).
+        let year = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|now| now.as_secs_f64() + 365.0 * 86_400.0)
+            .unwrap_or(-1.0);
+        let parsed: Vec<webview::Cookie> = cookies
+            .split(';')
+            .filter_map(|pair| {
+                let (name, value) = pair.trim().split_once('=')?;
+                let name = name.trim();
+                (!name.is_empty()).then(|| webview::Cookie {
+                    name: name.to_owned(),
+                    value: value.to_owned(),
+                    // `.qq.com`: the page (`y.qq.com`) and the API it asks (`c.y.qq.com`,
+                    // `u.y.qq.com`) are each under it, so one cookie answers for all three.
+                    domain: ".qq.com".to_owned(),
+                    path: "/".to_owned(),
+                    expires: year,
+                    // Not `HttpOnly`: the page's own script reads them as well (`document.cookie`,
+                    // which is how `cookieValue` finds the account's number).
+                    http_only: false,
+                    secure: true,
+                    session: false,
+                    // `None` (0): the API's own hosts are the same site as the page, so nothing
+                    // here is a cross-site request to be refused.
+                    same_site: 0,
+                })
+            })
+            .collect();
+        if let Err(error) = self.view.add_cookies(&parsed) {
+            crate::log!("[qq music] couldn't put the session's cookies in the page's jar: {error}");
+        }
         let message = serde_json::json!({ "action": "credential", "cookies": cookies }).to_string();
-        self.view.post_json(&message)
+        self.post_script(&message)
     }
 
     /// Signs out: the kept session goes, and the page forgets the account it had (the cookie and the
     /// credential pairs made from it), so what it asks from now on isn't the account's. The companion's
+    /// One message to the page, through its own `window.westplayRun` (`ExecuteScript`).
+    ///
+    /// The page is a whole site of the site's own now (`y.qq.com`, not `NavigateToString`'s blank
+    /// document), and the site's own scripts bring their own `chrome.webview` handlers with them:
+    /// a message posted to the event those handlers live on was never seen (the log showed the
+    /// app's first questions arriving, then nothing at all answering them). Bilibili's page is
+    /// reached this way for the same reason (`bilibili.rs`'s `pass_script`).
+    ///
+    /// `post_json` is kept for what a page without the function still needs: it is tried first,
+    /// and the script is the way in when that page has one.
+    fn post_script(&self, message: &str) -> windows::core::Result<()> {
+        let script = format!(
+            "window.westplayRun && window.westplayRun({});",
+            serde_json::to_string(message).expect("a string is JSON")
+        );
+        self.view.execute_script(&script)
+    }
+
     /// Log out says this, and so does a sign-out in the site's own window.
     ///
     /// Without it the page kept playing as the account just left, and the file brought it back at the
@@ -620,7 +697,7 @@ impl QqMusic {
         let _ = std::fs::remove_file(self.user_data.join(SESSION_FILE));
         *self.restore_cookie.borrow_mut() = None;
         let message = serde_json::json!({ "action": "credential", "cookies": "" }).to_string();
-        self.view.post_json(&message)?;
+        self.post_script(&message)?;
         // Its profile's own cookies go with it, now, while its page is the one holding them: clearing
         // them later (as the sign-in window opened) was too late — this page put them back the moment
         // they were taken, and the next sign-in found the account still signed in, with no page to pick
@@ -711,7 +788,7 @@ impl QqMusic {
                     // The volume kept last run, before anything plays: the page starts at full
                     // loudness otherwise (its own storage can't keep it: VOLUME_FILE).
                     if let Some(share) = read_volume(&self.user_data) {
-                        let _ = self.view.post_json(
+                        let _ = self.post_script(
                             &serde_json::json!({ "action": "volume", "percent": share * 100.0 })
                                 .to_string(),
                         );
@@ -719,14 +796,14 @@ impl QqMusic {
                     // The cab as it is (the truck's speakers, the head, the camera, the tone): a page
                     // that loaded anew is told it again, before anything plays.
                     for told in self.told.borrow().messages.iter().flatten() {
-                        let _ = self.view.post_json(told);
+                        let _ = self.post_script(told);
                     }
                     // The questions asked again now the session is in place: a page loading anew
                     // asks for the account's own lists, and the credential has to be there before
                     // it does (a list asked for without it comes back as everyone's, and the app
                     // keeps it — `homeCache` in qq_music.js).
                     for sent in self.unanswered.borrow().all() {
-                        let _ = self.view.post_json(&sent);
+                        let _ = self.post_script(&sent);
                     }
                 }
                 Some(Message::Probe(text)) => crate::log!("[qq music] {text}"),

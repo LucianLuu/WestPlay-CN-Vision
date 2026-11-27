@@ -222,7 +222,21 @@ export function Playlists() {
       {(page) => (
         <Scroll title="官方歌单">
           {page.sections.length === 0 && <p className="am-empty">暂无榜单</p>}
-          <Sections sections={page.sections} />
+          {/* The charts as their own page shows them: each group of lists laid out whole, in a grid —
+              a shelf cut every group to a dozen cards and the rest had to be asked for by pressing 全部
+              (owner 2026-11-28). */}
+          {page.sections.map((section, i) => (
+            <section className="am-section" key={`${section.title}:${i}`}>
+              <div className="am-section-head">
+                <h2>{section.title}</h2>
+              </div>
+              <div className="am-grid">
+                {section.items.map((item) => (
+                  <QqTile key={`${item.id}:${item.kind}`} item={item} />
+                ))}
+              </div>
+            </section>
+          ))}
         </Scroll>
       )}
     </Answered>
@@ -253,6 +267,15 @@ export function Channels({ shown }: { shown: boolean }) {
 /** "Mine": signed in shows the account's profile and favourited songs; otherwise a QR sign-in entry. */
 export function Mine() {
   const signedIn = useQqMusic((state) => state.signedIn)
+  // Not known yet: neither the sign-in entry nor the account's own page, so the tab doesn't open on one
+  // and swap to the other (owner 2026-11-28).
+  if (signedIn == null) {
+    return (
+      <Scroll title="我的">
+        <p className="am-empty">正在读取登录状态…</p>
+      </Scroll>
+    )
+  }
   return signedIn ? <MineList /> : <SignIn />
 }
 

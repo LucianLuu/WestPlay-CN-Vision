@@ -1640,6 +1640,9 @@ export type QqMusicCommand =
   | { action: 'add'; id: string }
   /** Open the site's own sign-in window on the desktop. */
   | { action: 'signIn' }
+  /** Sign out: the site's own sign-out window on the desktop, its page's kept session cleared, and its
+   * player back on the cleared profile (signed out). */
+  | { action: 'signOut' }
 
 /** What the Radio app asks of live radio's web player (`westplay_host::radio::Command`). */
 

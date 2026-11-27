@@ -4,6 +4,8 @@ import {
   goBack,
   openTab,
   openView,
+  signIn,
+  signOut,
   useQqMusic,
   useWebPlayer,
   type Tab,
@@ -45,6 +47,7 @@ const MAIN_TABS: { tab: Tab; label: string; glyph: (on: boolean) => ReactNode }[
 export function QqApp() {
   const tab = useQqMusic((state) => state.tab)
   const views = useQqMusic((state) => state.views)
+  const signedIn = useQqMusic((state) => state.signedIn)
   const [query, setQuery] = useState('')
   const typing = useKeyboard((state) => state.field?.id === FIELD)
   useWebPlayer()
@@ -140,7 +143,17 @@ export function QqApp() {
               )}
             </div>
           </nav>
-          <div ref={endRef} className="am-bar-side end" />
+          <div ref={endRef} className="am-bar-side end">
+            {/* As Apple Music's bar: Sign In at the right while signed out; the account's button, its
+                menu holding Sign Out, while signed in. Until the page has said which (`null`), nothing —
+                showing Sign In first put it there for a second after every open (owner 2026-11-28). */}
+            {signedIn === false && (
+              <button type="button" className="am-sign-in glass" onClick={signIn}>
+                登录
+              </button>
+            )}
+            {signedIn === true && <Account />}
+          </div>
         </div>
 
         <div className="am-body">
@@ -154,6 +167,40 @@ export function QqApp() {
       </section>
       <NowPlaying />
     </>
+  )
+}
+
+/** The account: its picture (a person, without one), its menu holding Sign Out — Apple Music's own
+ * account button, on QQ Music's bar. */
+function Account() {
+  const avatar = useQqMusic((state) => state.avatar)
+  const [menu, setMenu] = useState(false)
+  return (
+    <div className="am-account">
+      <button
+        type="button"
+        className="am-me glass"
+        aria-label="账号"
+        aria-expanded={menu}
+        onClick={() => setMenu(!menu)}
+      >
+        {avatar ? <img src={avatar} alt="" draggable={false} /> : <PersonGlyph size={34} />}
+      </button>
+      {menu && (
+        <div className="am-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenu(false)
+              signOut()
+            }}
+          >
+            退出登录
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

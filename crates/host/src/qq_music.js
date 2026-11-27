@@ -10,10 +10,6 @@
 (function () {
   const post = (message) => window.chrome?.webview?.postMessage(message)
 
-  // Where the layer answers: the host puts the port it started it on here before this script runs
-  // (8080 unless something else had it — Steam's own browser holds 8080 on players' PCs).
-  const BASE = window.__westplayQqBase || 'http://127.0.0.1:8080'
-
   // --- Small helpers ----------------------------------------------------------------------------------------
 
   const escapeHtml = (text) =>
@@ -90,7 +86,53 @@
    * down with it and showed the app a list it couldn't load (owner 2026-11-16).
    */
   const MAX_PAGES = 10
+  /**
+   * A list that comes whole in one answer.
+   *
+   * The site's own playlist endpoint (`/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg`) answers every
+   * song at once and reads no `num` or `page` — 559 of them on one tried. Walking pages against it
+   * asked for the same 559 thirteen times over (fast, but the app was handed a list thirteen times
+   * the size it has, and the answer took long enough that the page gave up on it first: 2026-11-27).
+   */
+  const wholeList = (path, key = 'songs') => {
+    // These answer their whole list at once, and read no `num` or `page`: walking pages against
+    // them repeats the same list until the cap.
+    if (path.startsWith('/songlist/')) return path
+    if (path.startsWith('/top/')) return path
+    if (path.includes('/fav/songs')) return path
+    return null
+  }
+
   const fetchAllSongs = async (path, key = 'songs') => {
+    // A list the site answers whole: asked once, nothing paged.
+    const whole = wholeList(path)
+    if (whole) {
+      const found = await get(whole)
+      // A playlist answers its songs inside `cdlist[0]`; the account's own lists (a route of
+      // `mine`'s) hand the songs and their header back already.
+      const listed = (found.cdlist ?? [])[0]
+      if (listed) {
+        return {
+          songs: listed.songlist ?? [],
+          info: {
+            // The id the app asked with, not the answer's `dissid`: that comes back as a number,
+            // and a ten-digit one loses its end (`4945887682` → `4945887`), so the page could not
+            // open the list it had just been handed (2026-11-27).
+            id: new URLSearchParams(whole.split('?')[1] ?? '').get('disstid') ?? listed.dissid ?? listed.disstid,
+            title: listed.dissname,
+            desc: listed.desc,
+            picurl: listed.logo,
+            creator_nick: listed.nickname ?? listed.creator?.nick,
+          },
+        }
+      }
+      // A chart answers its songs as `songlist`, with its own header in `topinfo`.
+      return {
+        songs: found[key] ?? found.songs ?? found.songlist ?? [],
+        info: found.info ?? found.topinfo ?? {},
+      }
+    }
+
     const all = []
     let info = {}
     for (let page = 1; page <= MAX_PAGES; page += 1) {
@@ -198,9 +240,40 @@
   }
   restoreCredential()
 
+  /**
+   * The page's own cookies, plus the names only the saved copy has.
+   *
+   * On the site's own origin (`qq_music.rs` loads y.qq.com now) the browser keeps the account's
+   * cookies itself, and the host puts the kept session's ones in that jar as it hands them over
+   * (`apply_cookies`), so `credentials: 'include'` sends them. What `document.cookie` shows is still
+   * short of them: `uin`, `qm_keyst` and `euin` are `HttpOnly` on the site, so the page's own
+   * string has every cookie but those, and the saved copy (the sign-in window's) is where they are
+   * read. Both are therefore read — the page's own value wherever it has one, the saved copy's for
+   * the rest. Before, the page's own string shadowed the saved one as soon as it was non-empty
+   * (which on `y.qq.com` is always), `uin` came back empty and `qqmine` asked the site with
+   * `uin: '0'` — answered `80030`, which took the whole "我的" page down (2026-11-27).
+   */
+  const siteCookie = () => {
+    const own = document.cookie || ''
+    const saved = savedCookie || ''
+    if (!saved) return own
+    if (!own) return saved
+    const named = new Set()
+    for (const pair of own.split(';')) {
+      const name = pair.split('=')[0].trim()
+      if (name) named.add(name)
+    }
+    const extra = saved
+      .split(';')
+      .map((pair) => pair.trim())
+      .filter((pair) => pair && !named.has(pair.split('=')[0].trim()))
+    return extra.length > 0 ? `${own}; ${extra.join('; ')}` : own
+  }
+
   const cookieValue = (name) => {
-    if (!savedCookie) return ''
-    const match = savedCookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
+    const from = siteCookie()
+    if (!from) return ''
+    const match = from.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
     if (!match) return ''
     // A cookie value isn't always URL-encoded, and `%` in one (a key can have it) makes
     // `decodeURIComponent` throw — which took the whole credential with it, leaving every request
@@ -212,6 +285,15 @@
       return match[1]
     }
   }
+
+  /**
+   * The account's own number, from whichever cookie carries it (`''` when the page has none).
+   *
+   * Never `'0'`: the site reads zero as "there is no such account" and answers `80030` instead of
+   * the account's lists (checked 2026-11-27), where an empty `uin` is what makes it fall back to
+   * the cookie it was sent and answer them properly.
+   */
+  const accountUin = () => cookieValue('uin') || cookieValue('musicid') || ''
 
   // The sign-in window returns y.qq.com's own cookie names (uin / qm_keyst / euin / psrf_qqopenid, ...).
   // The local layer's credential parser only reads its own names (musicid / musickey / str_musicid / ...),
@@ -278,29 +360,450 @@
    * A middle-layer request. `options.anon`: made without the account's credential, for the site's
    * own list for everyone (which a signed-in request no longer answers with: see `home`).
    */
+  /**
+   * One of the site's own answers, asked of the site itself.
+   *
+   * This used to ask a middle layer (`qq-music-layer`, a Python process answering a made-up API on
+   * the loopback) with the same paths below. Two of that layer's answers could not be fixed from
+   * here — a playlist's songs came back thirty at a time (`num=30` written in its own query) and a
+   * song's stream was asked without the file's name (the site reads that as an account with no
+   * rights, `result` 104003) — because the layer is compiled and its sources aren't ours.
+   *
+   * The paths stay: the app asks for the same shapes either way, so everything that parses what
+   * comes back is untouched. What changed is who answers.
+   */
   const get = async (path, options = {}) => {
-    // `fresh`: the layer caches its answers, and a cached stream's vkey can run out — the CDN then answers
-    // 403 (which the browser reports as a source it can't play). Its cache is keyed by the whole address,
-    // so a changing query asks it again.
-    const where = options.fresh
-      ? `${BASE}${path}${path.includes('?') ? '&' : '?'}fresh=${Date.now()}`
-      : `${BASE}${path}`
-    const response = await fetch(where, {
-      headers: { accept: 'application/json', ...(options.anon ? {} : credentialHeaders()) },
+    const [route, search = ''] = path.split('?')
+    const params = new URLSearchParams(search)
+    const asking = ROUTES[route] ?? ROUTES_BY_ID(route)
+    if (!asking) throw new Error(`no route for ${route.split('/').slice(0, 2).join('/')}`)
+    // The site's own names for a feed's parts, as the readers here expect them (`named`).
+    return named(await asking(route, params, options))
+  }
+
+  // --- The site's own endpoints -----------------------------------------------------------------
+  //
+  // y.qq.com answers from three places, and each question goes to the one that has it:
+  //
+  //   c.y.qq.com   the older `fcg`-style endpoints (search, a playlist's songs, lyrics, the charts):
+  //                JSON, asked with the page's own referer
+  //   u.y.qq.com   `cgi-bin/musicu.fcg`, one endpoint for every different part of the site — the
+  //                account, a song's stream, the home feed — each question naming its `module` and
+  //                `method`
+  //
+  // Checked 2026-11-26 against a signed-in account: a playlist's 559 songs come back in a single
+  // answer, where the layer stopped at thirty.
+
+  /** A `GET` answered as JSON, with the account's own headers (`anon`: without them). */
+  const site = async (address, asked = {}) => {
+    // `include`: the page is on the site's own origin now (`qq_music.rs` loads y.qq.com rather
+    // than a blank document), so the browser sends the account's cookie by itself — the way
+    // Bilibili's page does it (`bilibili.js`). The `X-Qq-*` headers stay for the layer's paths
+    // that still read them.
+    // No `X-Qq-*` headers any more: they were the middle layer's way of being told who asked, and
+    // the site refuses a cross-origin request that carries them (its CORS answer allows only the
+    // simple ones, so the preflight is denied and the request never leaves — `Failed to fetch`,
+    // checked 2026-11-27). On the site's own origin the cookie says who asked.
+    const answer = await fetch(address, {
+      credentials: 'include',
+      headers: { accept: 'application/json' },
     })
-    // Too many asked at once (the layer's own limit, 429): waited for, a few times, rather than
-    // failing a page that would have answered a moment later.
-    if (response.status === 429) {
-      const attempt = options.attempt ?? 0
-      if (attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)))
-        return get(path, { ...options, attempt: attempt + 1 })
+    if (!answer.ok) throw new Error(`HTTP ${answer.status}`)
+    return answer.json()
+  }
+
+  /**
+   * One `musicu.fcg` question: `module` and `method` name the part of the site, `param` its own
+   * arguments. The answer comes back under `req`, with its `data` inside.
+   */
+  const musicu = async (module, method, param = {}, asked = {}) => {
+    const answer = await fetch('https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      method: 'POST',
+      credentials: 'include',
+      // `content-type: application/json` is itself a preflighted header, but the site allows that
+      // one; the `X-Qq-*` pair is what it doesn't (see `site`).
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        comm: { ct: '19', cv: '1859', uin: cookieValue('uin') || '0' },
+        req: { module, method, param },
+      }),
+    })
+    if (!answer.ok) throw new Error(`HTTP ${answer.status}`)
+    const body = await answer.json()
+    const req = body.req ?? {}
+    if (req.code !== undefined && req.code !== 0) throw new Error(`site code ${req.code}`)
+    return req.data ?? {}
+  }
+
+  /** `c.y.qq.com` with the page's own referer (the site answers nothing without one). */
+  const cgi = async (route, params, asked = {}) => {
+    const query = params.toString()
+    const body = await site(`https://c.y.qq.com${route}${query ? `?${query}` : ''}`, asked)
+    // The `fcg` endpoints wrap their own answer in `data`, which is what the middle layer passed on
+    // unwrapped; the readers here were written against that.
+    return body?.data ?? body
+  }
+
+  /**
+   * A song's stream: the address its sound plays from.
+   *
+   * Answered in the shape the player reads (`[{ result, purl, filename }]`, the middle layer's own:
+   * a song the account may not play has `result` 104003 and no `purl`, and that is what tells a
+   * pay-walled song from a broken one).
+   */
+  const streamAnswer = async (mid) => {
+    const found = await musicu('vkey.GetVkeyServer', 'CgiGetVkey', {
+      guid: '10000',
+      songmid: [mid],
+      songtype: [0],
+      // The file's own name: without it the site reads the request as an account with no rights
+      // (`result` 104003, what VIP songs answered to the layer's way of asking).
+      filename: [`M500${mid}${mid}.mp3`],
+      uin: cookieValue('uin') || '0',
+      loginflag: 1,
+      platform: '20',
+    })
+    const info = (found.midurlinfo ?? [])[0] ?? {}
+    // The site names its CDNs with `http://` only, and this page is `https://` — a stream asked
+    // over `http://` from an `https://` document is refused as mixed content before a byte of it is
+    // read (owner 2026-11-27: "放不了"). The same hosts answer `https://`; that is what is used.
+    const host = String((found.sip ?? [])[0] ?? '').replace(/^http:\/\//, 'https://')
+    return [
+      {
+        result: info.result ?? 0,
+        purl: info.purl ?? '',
+        filename: info.filename ?? '',
+        // The CDN the site names, so the page needn't guess one.
+        sip: host,
+      },
+    ]
+  }
+
+  /**
+   * The site's own names for what a feed holds, as the names the parsing below reads.
+   *
+   * The middle layer answered with these renamed (`v_shelf` → `shelves`, `v_niche` → `niches`,
+   * `v_card` → `cards`), and everything that draws a feed was written against that: reading the
+   * site's answer directly left every shelf empty and the app's home blank (found 2026-11-27).
+   * Rather than teach every reader the site's names, the one place that asks renames them back.
+   */
+  /**
+   * One song, with the names the readers here use.
+   *
+   * The site names a song's own fields with its kind in them (`songmid`, `songname`, `albummid`,
+   * `albumname`, `singer`), and its album as `album`, an object with `mid` and `name`; the middle
+   * layer renamed them (`mid`, `name`, `album.mid`), and every reader was written against that.
+   */
+  const songNamed = (song) => {
+    if (!song || typeof song !== 'object') return song
+    if (song.mid === undefined && song.songmid !== undefined) song.mid = song.songmid
+    if (song.name === undefined && song.songname !== undefined) song.name = song.songname
+    if (song.title === undefined && song.songname !== undefined) song.title = song.songname
+    if (song.album === undefined || typeof song.album !== 'object') {
+      song.album = {
+        mid: song.albummid ?? song.album?.mid ?? null,
+        name: song.albumname ?? song.album?.name ?? '',
       }
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const body = await response.json()
-    if (body && body.code !== undefined && body.code !== 0) throw new Error(`layer code ${body.code}`)
-    return body?.data ?? {}
+    return song
+  }
+
+  /** Every song of a list, as `songNamed` gives them. */
+  const songsNamed = (list) => (Array.isArray(list) ? list.map(songNamed) : list)
+
+  const named = (data) => {
+    if (!data || typeof data !== 'object') return data
+    // A list of songs, whatever part of the site answered it.
+    for (const key of ['songs', 'song_list', 'songlist', 'songlists']) {
+      if (Array.isArray(data[key])) data[key] = songsNamed(data[key])
+    }
+    // A chart (`fcg_v8_toplist_cp`) names its songs `songlist`; the readers here ask for `songs`
+    // (that is what `fetchAllSongs` is handed as its key).
+    if (!Array.isArray(data.songs) && Array.isArray(data.songlist)) {
+      data.songs = data.songlist
+    }
+    // A playlist's songs come inside `cdlist[0].songlist`.
+    if (Array.isArray(data.cdlist)) {
+      for (const one of data.cdlist) {
+        if (one && Array.isArray(one.songlist)) one.songlist = songsNamed(one.songlist)
+      }
+    }
+    if (Array.isArray(data.v_shelf)) {
+      data.shelves = data.v_shelf.map((shelf) => {
+        if (shelf && Array.isArray(shelf.v_niche)) {
+          shelf.niches = shelf.v_niche.map((niche) => {
+            if (niche && Array.isArray(niche.v_card)) niche.cards = niche.v_card
+            return niche
+          })
+        }
+        return shelf
+      })
+    }
+    return data
+  }
+
+  /**
+   * The paths the app asks for, each as the site's own question.
+   *
+   * A path with an id in it (`song/list/{mid}/detail`) is matched on its first two segments and the
+   * id read off the third: one entry answers every song, whatever its mid.
+   */
+  /**
+   * The chart the app's `猜你喜欢` plays from.
+   *
+   * The site's radar isn't one of the `fcg` endpoints, and its own answer is a page of shelves
+   * rather than a list of songs. The 飙升 chart is the closest of the site's own: the hundred songs
+   * it has picked lately, as one list — which is what the app's card does with it.
+   */
+  const RADAR_TOP_ID = 62
+  /** 巅峰榜·热歌 (the site's own chart number, from its charts list): the songs `热歌` shows. */
+  const HOT_TOP_ID = 26
+  /** 巅峰榜·新歌: what 新歌 shows, the chart that answers the card of the same name on the site. */
+  const NEW_TOP_ID = 27
+
+  /** How many of a chart's songs one page of `fetchRadar` brings. */
+  const RADAR_PAGE_SIZE = 20
+
+  /** A recommended-playlists answer's lists, whichever shape the site used. */
+  const playedLists = (found) =>
+    found.songlist ?? found.v_playlist ?? found.data?.songlist ?? found.data?.list ?? []
+
+  const ROUTES = {
+    '/recommend/get_home_feed': (_route, _params, asked) =>
+      musicu('music.recommend.RecommendFeed', 'get_recommend_feed', { direction: 0, page: 0 }, asked),
+    // The radar's picks (`猜你喜欢`): a chart of its own, by its number, the way the site's page
+    // asks for it.
+    '/recommend/get_radar_recommend': async (_route, params) => {
+      const page = Number(params.get('page') ?? 1)
+      const found = await cgi(
+        '/v8/fcg-bin/fcg_v8_toplist_cp.fcg',
+        new URLSearchParams({ format: 'json', topid: String(RADAR_TOP_ID) }),
+      )
+      // A chart's songs come wrapped: each entry is the song's rank (`cur_count`, `in_count`) with
+      // the song itself under `data`. `named` gives that one its fields.
+      const all = (found.songlist ?? []).map((one) => one?.data ?? one)
+      // One chart, cut into pages here: the chart endpoint answers the whole list at once, and the
+      // reader walks pages until one brings nothing new (`fetchRadar`).
+      const from = (page - 1) * RADAR_PAGE_SIZE
+      const slice = all.slice(from, from + RADAR_PAGE_SIZE)
+      return { songs: slice, has_more: slice.length === RADAR_PAGE_SIZE }
+    },
+    // The playlist wall (`推荐歌单`): the site's own lists of the 歌单广场, a page of them at a time.
+    '/recommend/get_recommend_songlist': async (_route, params) => {
+      // The endpoint this used to read (`fcg_v8_splcomm_rec.fcg`) answers 404 now (checked
+      // 2026-11-28); the wall is the one its own 歌单广场 page asks for, which needs the site's
+      // referer — sent by the browser, the page being on y.qq.com.
+      const found = await cgi(
+        '/splcloud/fcgi-bin/fcg_get_diss_by_tag.fcg',
+        new URLSearchParams({
+          format: 'json',
+          categoryId: params.get('categoryId') ?? '10000000',
+          sortId: params.get('sortId') ?? '5',
+          sin: params.get('sin') ?? '0',
+          ein: params.get('num') ?? '10',
+        }),
+      )
+      // Its own names (`dissid`, `dissname`, `imgurl`, `listennum`), as `playlistItem` reads them.
+      const lists = playedLists(found).map((one) => ({
+        id: String(one.dissid ?? one.id ?? ''),
+        title: one.dissname ?? one.name ?? '',
+        creator_nick: one.creator?.name ?? one.nickname ?? '',
+        desc: one.introduction ?? one.desc ?? '',
+        picurl: String(one.imgurl ?? one.picurl ?? '').replace(/^http:\/\//, 'https://'),
+        listen_num: one.listennum ?? 0,
+      }))
+      return { songlists: lists }
+    },
+    '/recommend/get_recommend_newsong': (_route, _params, asked) =>
+      musicu('music.recommend.RecommendFeed', 'get_recommend_feed', { direction: 0, page: 0 }, asked),
+    '/recommend/get_guess_recommend': (_route, _params, asked) =>
+      musicu('music.recommend.RecommendFeed', 'get_recommend_feed', { direction: 0, page: 0 }, asked),
+    // The charts: the site's own list of them, as `{ group: [{ name, toplist }] }` — one group,
+    // which is how the middle layer answered too (`fcg_myqq_toplist.fcg` names its own list
+    // `topList`, and every entry is a chart of songs).
+    '/top/get_category': async () => {
+      const found = await cgi(
+        '/v8/fcg-bin/fcg_myqq_toplist.fcg',
+        new URLSearchParams({ format: 'json' }),
+      )
+      // The site answers under `data` here (the `fcg` endpoints wrap their own answer).
+      const lists = found.topList ?? []
+      return {
+        group: [
+          {
+            name: '排行榜',
+            // `chartItem` reads `id`, `name` and the picture by those names; the chart endpoint
+            // calls them `id`, `topTitle` and `picUrl` (an `http://` address, which an `https://`
+            // page can't load — asked over `https://` instead).
+            toplist: lists.map((one) => ({
+              ...one,
+              id: String(one.topId ?? one.id ?? ''),
+              name: one.topTitle ?? one.title ?? '',
+              title_sub: one.topTitle ?? one.title ?? '',
+              intro: one.intro ?? '',
+              front_pic_url: String(one.frontPicUrl ?? one.picUrl ?? one.headPicUrl ?? '').replace(
+                /^http:\/\//,
+                'https://',
+              ),
+            })),
+          },
+        ],
+      }
+    },
+    '/search/get_hotkey': () =>
+      cgi('/splcloud/fcgi-bin/gethotkey.fcg', new URLSearchParams({ format: 'json' })),
+    '/search/general_search': (_route, params, asked) =>
+      cgi(
+        '/soso/fcgi-bin/client_search_cp',
+        new URLSearchParams({
+          format: 'json',
+          n: params.get('num') ?? '15',
+          p: '1',
+          w: params.get('keyword') ?? '',
+        }),
+        asked,
+      ),
+
+
+  }
+
+  /** The paths with an id in them, matched on their first two segments. */
+  const ROUTES_BY_ID = (route) => {
+    const parts = route.split('/').filter(Boolean)
+    // The last segment names the question (`detail`, `songs`, `lyric`, `url`), and the one before
+    // it is the id: `/songlist/{id}/detail`, `/song/{mid}/lyric`. (`head` was the first two
+    // segments — `/songlist/{id}` — which matched nothing, so a playlist, an album and a singer
+    // each fell through to "no route" and the page gave up on a question it could answer:
+    // 2026-11-27.)
+    const kind = parts[0] ?? ''
+    const last = parts[parts.length - 1] ?? ''
+    const id = parts.length >= 3 ? parts[1] : ''
+
+    // `/user/{euin}/homepage`, `/user/{euin}/fav/songlists`, `/user/{uin}/created_songlists`: the
+    // account the page is signed in as, whichever of its own ids the app asked with.
+    if (parts[0] === 'user') {
+      if (parts[2] === 'homepage') {
+        return () => musicu('music.UserInfo.userInfoServer', 'GetLoginUserInfo', {})
+      }
+      if (parts[2] === 'fav' && parts[3] === 'songlists') {
+        return async () => {
+          // `GetPlaylistFavInfo`, not `CgiGetPlaylistFavInfo`: the `Cgi` one answers `80050` with a
+          // single junk row whatever the account has (checked 2026-11-27).
+          const found = await musicu('music.musicasset.PlaylistFavRead', 'GetPlaylistFavInfo', {
+            uin: accountUin(),
+          })
+          // The site's own favourite lists, in the app's card shape (`playlistItem`'s names).
+          return {
+            playlists: (found.v_list ?? []).map((one) => ({
+              id: String(one.tid ?? one.dissid ?? ''),
+              title: one.name ?? one.dirName ?? one.dissname ?? one.title ?? '',
+              picurl: String(one.logo ?? one.picUrl ?? '').replace(/^http:\/\//, 'https://') || null,
+              desc: '',
+              creator_nick: one.nickname ?? '',
+            })),
+          }
+        }
+      }
+      if (parts[2] === 'created_songlists') {
+        return async () => {
+          const found = await musicu('music.musicasset.PlaylistBaseRead', 'GetPlaylistByUin', {
+            uin: accountUin(),
+          })
+          const ours = (found.v_playlist ?? []).filter(
+            (one) => one.dirShow !== 0 && one.tid !== undefined,
+          )
+          // The names `playlistItem` reads (`id`, `title`, `picurl`, `creator_nick`): the app's
+          // own card shape, which the middle layer answered in.
+          return {
+            playlists: ours.map((one) => ({
+              id: String(one.tid),
+              title: one.dirName,
+              picurl: String(one.picUrl ?? one.bigpicUrl ?? '').replace(/^http:\/\//, 'https://') || null,
+              desc: '',
+              creator_nick: '',
+            })),
+          }
+        }
+      }
+      if (parts[2] === 'fav' && parts[3] === 'songs') {
+        return async () => {
+          // The song list of 我喜欢: a folder of the account's whose tid is its own.
+          const found = await musicu('music.musicasset.PlaylistBaseRead', 'GetPlaylistByUin', {
+            uin: accountUin(),
+          })
+          const loved = (found.v_playlist ?? []).find((one) => one.dirId === 201)
+          if (!loved) return { songs: [], info: { owner: {} } }
+          const list = await get(`/songlist/${loved.tid}/detail`)
+          const listed = (list.cdlist ?? [])[0] ?? {}
+          return {
+            songs: listed.songlist ?? list.songlist ?? [],
+            // The list's own owner (`nickname`, `headurl`) is the account's name and picture, which
+            // `music.UserInfo.userInfoServer` `GetLoginUserInfo` — what `homepage` asks — answers
+            // `1000` for (a login the site no longer honours, while this list answers anyone). It
+            // rides in `info`, the one field `fetchAllSongs` carries back (2026-11-27).
+            info: { owner: { nickname: listed.nickname ?? '', headurl: listed.headurl ?? '' } },
+          }
+        }
+      }
+    }
+    if (kind === 'song' && last === 'detail') {
+      return async () => {
+        const found = await musicu('music.pf_song_detail_svr', 'get_song_detail', { song_mid: id })
+        // The site answers a song under `track_info` (`mid`, `name`, `singer`, `album`,
+        // `interval`); the readers here ask for it as `track`, and `named` gives its own fields
+        // their names (see `songNamed`).
+        const track = found.track_info ?? found.track ?? found
+        return { track: songNamed(track) }
+      }
+    }
+    if (kind === 'song' && last === 'lyric') {
+      return () =>
+        cgi(
+          '/lyric/fcgi-bin/fcg_query_lyric_new.fcg',
+          new URLSearchParams({ songmid: id, format: 'json', nobase64: '1', g_tk: '5381' }),
+        )
+    }
+    if (kind === 'song' && last === 'url') return () => streamAnswer(id)
+    if (kind === 'songlist' && last === 'detail') {
+      // A playlist, every song of it in one answer — the site's own `/qzone` endpoint, which takes
+      // no `num`: this is where the layer stopped at thirty.
+      return () =>
+        cgi(
+          '/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg',
+          new URLSearchParams({
+            type: '1',
+            json: '1',
+            utf8: '1',
+            onlysong: '0',
+            disstid: id,
+            format: 'json',
+          }),
+        )
+    }
+    if (kind === 'album' && last === 'songs') {
+      return () => musicu('music.musichallAlbum.AlbumInfoServer', 'GetAlbumDetail', { album_mid: id })
+    }
+    if (kind === 'top' && last === 'detail') {
+      // A chart by its number: the songs are `songlist`, each a rank with the song under `data`.
+      return async () => {
+        const found = await cgi(
+          '/v8/fcg-bin/fcg_v8_toplist_cp.fcg',
+          new URLSearchParams({ format: 'json', topid: id }),
+        )
+        return {
+          ...found,
+          songs: (found.songlist ?? []).map((one) => one?.data ?? one),
+        }
+      }
+    }
+    if (kind === 'singer' && last === 'songs') {
+      return () =>
+        musicu('music.musichallSinger.SingerInfoInter', 'GetSingerDetail', { singer_mid: id })
+    }
+    return null
   }
 
   // --- The app's questions ----------------------------------------------------------------------------------
@@ -403,12 +906,23 @@
    * WestPlay runs; a sign-in clears it (`saveCredential`).
    */
   /**
-   * The radar's picks, a page at a time. The layer's own list for a signed-in account comes 5 at a
-   * time (`has_more` saying there are more), so asking once showed the app five songs where the
-   * site shows a scrolling list (owner 2026-11-16). Pages are asked for until one repeats or says
-   * there are no more, up to `RADAR_PAGES`.
+   * The radar's picks, a page at a time. Pages are asked for until one repeats or says there are no
+   * more, up to `RADAR_PAGES`.
+   *
+   * One page since 2026-11-27: the chart it reads from (`topid` 62) is answered whole, 88 KB fetched
+   * in about three seconds, and six pages of it were six such fetches before `Home` — the app's own
+   * timeout came first and the cab said "载入失败". One page is 20 songs, which is what the app's own
+   * list shows anyway.
    */
-  const RADAR_PAGES = 6
+  const RADAR_PAGES = 1
+  /** A chart's own songs, its first `limit` of them (`named` gives each entry's `data`). */
+  const fetchChart = async (topid, limit) => {
+    const found = await cgi(
+      '/v8/fcg-bin/fcg_v8_toplist_cp.fcg',
+      new URLSearchParams({ format: 'json', topid: String(topid) }),
+    )
+    return (found.songlist ?? []).slice(0, limit).map((one) => one?.data ?? one)
+  }
   const fetchRadar = async () => {
     const seen = new Set()
     const songs = []
@@ -434,9 +948,27 @@
     return songs
   }
 
-  /** One feed's shelves as the app's sections (its cards mapped by `feedCard`). */
+  /**
+   * One feed's shelves as the app's sections (its cards mapped by `feedCard`).
+   *
+   * The site's feed is many shelves of one or two cards each (its own page draws them as tiles of
+   * different widths, side by side); the app draws a section as one row of cards, so a shelf of one
+   * card was a row of one card and the home page was a column of near-empty rows (owner 2026-11-27:
+   * "每个歌单一行，看着太空旷了"). Every card is one shelf now, 为你推荐, in the site's own order;
+   * a shelf that is all songs stays a shelf of its own, played as a list.
+   */
   const feedSections = (feed) => {
     const sections = []
+    const shelfCards = []
+    // One shelf holds what several did: a card the site lists twice (the same 百万收藏 in two
+    // shelves) stays one card, where the page asked for it by its own position in a row before.
+    const seen = new Set()
+    const once = (card) => {
+      const key = `${card.kind}:${card.id}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    }
     for (const shelf of Array.isArray(feed?.shelves) ? feed.shelves : []) {
       const title = escapeHtml(shelf?.title_content || shelf?.title_template || '').trim()
       const cards = []
@@ -451,26 +983,37 @@
       // at all shows as cards.
       const songCards = cards.filter((card) => card.kind === 'song')
       const listable = songCards.length === cards.length
+      if (!listable) {
+        shelfCards.push(...cards.filter((card) => card.kind !== 'song' && once(card)))
+        continue
+      }
       sections.push({
         title: title || '为你推荐',
-        style: listable ? 'songs' : 'shelf',
-        items: listable ? [] : cards.filter((card) => card.kind !== 'song'),
-        songs: listable
-          ? songCards.map((card) => ({
-              id: card.id,
-              name: card.name,
-              artist: card.by,
-              album: '',
-              albumId: null,
-              artistId: null,
-              image: card.image,
-              color: card.color,
-              number: null,
-              explicit: false,
-              duration: 0,
-            }))
-          : [],
+        style: 'songs',
+        items: [],
+        songs: songCards.map((card) => ({
+          id: card.id,
+          name: card.name,
+          artist: card.by,
+          album: '',
+          albumId: null,
+          artistId: null,
+          image: card.image,
+          color: card.color,
+          number: null,
+          explicit: false,
+          duration: 0,
+        })),
       })
+    }
+    if (shelfCards.length > 0) {
+      // Two rows of cards, not one: the site's own first two picks stay 为你推荐, everything after
+      // them is a shelf of its own, 你的宝藏歌单 (owner 2026-11-28: "第一行保留前两个歌单，后面的歌单
+      // 另起一行，书架名称就叫你的宝藏歌单").
+      const rows = [{ title: '为你推荐', style: 'shelf', items: shelfCards.slice(0, 2), songs: [] }]
+      const rest = shelfCards.slice(2)
+      if (rest.length > 0) rows.push({ title: '你的宝藏歌单', style: 'shelf', items: rest, songs: [] })
+      sections.unshift(...rows)
     }
     return sections
   }
@@ -501,13 +1044,45 @@
     }
 
     if (sections.length > 0) {
-      // The site's own 猜你喜欢-沉浸刷歌, as the one list of songs to play: the account's radar, which
-      // is what that card opens on the site too.
-      const picks = (await fetchRadar()).map(safeTrack)
-      if (picks.length > 0) {
-        sections.push({ title: '猜你喜欢', style: 'songs', items: [], songs: picks })
+      // More of the site's own, for the home page and its 频道 (owner 2026-11-28: "内容还有点少"):
+      // its charts as a row, its playlist wall as a row, and the songs of its 热歌 and 新歌 charts as
+      // the lists to play. Asked together with 猜你喜欢's radar, so the page waits for the slowest of
+      // them and not for each in turn; a part that fails only leaves its own row out.
+      const [picks, charts, wall, hot, fresh] = await Promise.all([
+        fetchRadar().catch(() => []),
+        get('/top/get_category').catch(() => null),
+        get('/recommend/get_recommend_songlist?num=19').catch(() => null),
+        fetchChart(HOT_TOP_ID, 20).catch(() => []),
+        fetchChart(NEW_TOP_ID, 20).catch(() => []),
+      ])
+      const rows = []
+      const chartCards = (charts?.group ?? []).flatMap((group) => group?.toplist ?? []).map(chartItem)
+      if (chartCards.length > 0) {
+        rows.push({ title: '排行榜', style: 'shelf', items: chartCards, songs: [] })
       }
-      const answer = { sections }
+      if (wall?.songlists?.length > 0) {
+        rows.push({ title: '推荐歌单', style: 'shelf', items: wall.songlists.map(playlistItem), songs: [] })
+      }
+      const lists = []
+      if (hot.length > 0) {
+        lists.push({ title: '热歌', style: 'songs', items: [], songs: hot.map(safeTrack) })
+      }
+      if (fresh.length > 0) {
+        lists.push({ title: '新歌', style: 'songs', items: [], songs: fresh.map(safeTrack) })
+      }
+      if (picks.length > 0) {
+        lists.push({ title: '猜你喜欢', style: 'songs', items: [], songs: picks })
+      }
+      // The site's own order kept: the cards first (为你推荐, 你的宝藏歌单), then its charts and its
+      // wall, then the lists to play.
+      const answer = {
+        sections: [
+          ...sections.filter((section) => section.style !== 'songs'),
+          ...rows,
+          ...sections.filter((section) => section.style === 'songs'),
+          ...lists,
+        ],
+      }
       // Kept only for a signed-in account: a page that asked before the credential arrived gets the
       // anonymous list, and keeping it would hide the account's own for the whole run.
       if (savedCookie || savedCred) homeCache = answer
@@ -588,17 +1163,19 @@
         songs: (guess.songs ?? []).map(track),
         artists: [],
         albums: [],
-        playlists: (hot.vec_hotkey ?? []).map(hotkeyItem),
+        playlists: (hot.vec_hotkey ?? hot.hotkey ?? []).map(hotkeyItem),
         stations: [],
       }
     }
     const found = await get(`/search/general_search?keyword=${encodeURIComponent(query)}&num=15`)
     return {
       top: [],
-      songs: (found.song?.items ?? []).map(track),
-      artists: (found.singer?.items ?? []).map(artistItem),
-      albums: (found.album?.items ?? []).map(albumItem),
-      playlists: (found.songlist?.items ?? []).map(playlistItem),
+      // The search endpoint names its own groups' entries `list` (`song.list`, `singer.list`…),
+      // where the middle layer called them `items`.
+      songs: (found.song?.list ?? found.song?.items ?? []).map(track),
+      artists: (found.singer?.list ?? found.singer?.items ?? []).map(artistItem),
+      albums: (found.album?.list ?? found.album?.items ?? []).map(albumItem),
+      playlists: (found.songlist?.list ?? found.songlist?.items ?? []).map(playlistItem),
       stations: [],
     }
   }
@@ -684,17 +1261,38 @@
         ? get(`/user/${encodeURIComponent(uin)}/created_songlists`).catch(() => ({ playlists: [] }))
         : Promise.resolve({ playlists: [] }),
     ])
-    const fav = await fetchAllSongs(`/user/${encodeURIComponent(euin)}/fav/songs`)
-    const favSongs = fav.songs
-    const base = home?.Info?.BaseInfo ?? home?.base_info ?? {}
+    // The loved songs come as one list too (the playlist route answers whole), so `fetchAllSongs`
+    // asks once — the path it starts with is what tells it (`wholeList`). A list the site won't
+    // hand over (a dropped answer, an account the `uin` didn't name) leaves the page with what it
+    // has — the header and the playlists — rather than failing whole, which the app showed as a
+    // "我的" tab that couldn't load at all (2026-11-27).
+    let favSongs = []
+    let owner = {}
+    try {
+      const fav = await fetchAllSongs(`/user/${encodeURIComponent(euin)}/fav/songs`)
+      favSongs = fav.songs
+      // The list's own owner (its name and picture): what the header falls back to when the
+      // login-only profile API has nothing (`GetLoginUserInfo` answers `1000`).
+      owner = fav.info?.owner ?? {}
+    } catch {}
+    // The account's own header: the site answers it under `info` (`nick`, `logo`), and the middle
+    // layer's shape (`Info.BaseInfo`) is the other name it has had.
+    const base = home?.info ?? home?.Info?.BaseInfo ?? home?.base_info ?? {}
     const out = EMPTY_COLLECTION()
     out.item = {
-      id: String(euin),
-      kind: 'curator',
-      name: escapeHtml(base.Name || base.name || '我的音乐'),
+      // Its own slot again, not the account's number: the page this item opens is the same one
+      // (`collection` with `qqmine`), and a number here was looked up as a playlist's id, which
+      // has nothing of the account's own list (2026-11-27: "我的" couldn't open).
+      id: 'qqmine',
+      kind: 'playlist',
+      name: escapeHtml(base.Name || base.name || owner.nickname || '我的音乐'),
       by: '我的收藏',
       note: '',
-      image: base.Avatar ?? base.avatar ?? null,
+      image:
+        String(base.logo ?? base.Avatar ?? base.avatar ?? owner.headurl ?? '').replace(
+          /^http:\/\//,
+          'https://',
+        ) || null,
       wide: null,
       color: '#2c2c2e',
       explicit: false,
@@ -857,16 +1455,19 @@
       post({ answer: id, failed: true })
       return
     }
+    let why = ''
     for (const wait of [0, 600]) {
       if (wait) await new Promise((resolve) => setTimeout(resolve, wait))
       try {
-        post({ answer: id, [question.ask]: await asked(question) })
+        const found = await asked(question)
+        post({ answer: id, [question.ask]: found })
         return
-      } catch {
-        // Once more, or failed.
+      } catch (error) {
+        // Once more, or failed — and why, said so a failed question isn't only "nothing came back".
+        why = text(error?.stack ?? error?.message ?? error).slice(0, 300)
       }
     }
-    post({ answer: id, failed: true })
+    post({ answer: id, failed: true, why })
   }
 
   // --- Player: a hidden <audio> fed by the layer's stream URLs ------------------------------------------------
@@ -919,6 +1520,9 @@
   const audio = () => {
     if (!player.audio) {
       const el = document.createElement('audio')
+      // Marked as WestPlay's: the site's own player pauses whatever `<audio>` it finds playing, and
+      // this one is not the site's (`qq_quiet.js` refuses `pause` for it).
+      window.westplayOwnAudio?.(el)
       el.preload = 'auto'
       el.volume = player.volume
       // Taken into the browser's own graph for the cab (`cab_sound.js`): a cross-origin element without
@@ -1169,25 +1773,8 @@
     // The credential goes as the site names it (`uin`, `qqmusic_key`, `qm_keyst` …): the layer's
     // `qq_musicid` / `musickey` pair means nothing to y.qq.com, so both sets are sent and
     // `run_westplay.py` picks the site's own names.
-    let viaOurs = null
-    try {
-      viaOurs = await get(`/westplay/song_url/${encodeURIComponent(mid)}`)
-    } catch {
-      // Not there (an older layer without the route), or it couldn't answer: the layer's own
-      // route below says what it has.
-    }
-    if (viaOurs && viaOurs.result === 0 && viaOurs.purl) {
-      const address = CDN + viaOurs.purl
-      streams.set(address, {
-        mid,
-        filename: String(viaOurs.filename ?? ''),
-        result: viaOurs.result,
-        purl: String(viaOurs.purl),
-      })
-      return address
-    }
     const found = await get(`/song/${encodeURIComponent(mid)}/url`, { fresh })
-    const list = Array.isArray(found) ? found : found?.data
+    const list = Array.isArray(found) ? found : (found?.midurlinfo ?? found?.data)
     const item = list?.[0]
     if (!item || item.result !== 0 || !item.purl) {
       // What the layer says of it: a song of an album or playlist that only a paying account may
@@ -1211,7 +1798,11 @@
     }
     // Kept for what a failed play says: the layer's own name for the file (its prefix is the quality,
     // its extension the format) tells a song WebView2 can't decode from a host that refused the request.
-    const address = CDN + item.purl
+    const base = String(item.sip && String(item.sip).startsWith('http') ? item.sip : CDN).replace(
+      /^http:\/\//,
+      'https://',
+    )
+    const address = base + item.purl
     streams.set(address, {
       mid,
       filename: String(item.filename ?? ''),
@@ -1295,9 +1886,10 @@
       // taken and refused, the browser wouldn't play it at all. Anything else plays as it is.
       takeIntoCab()
       const el = audio()
-      // Paused before the source changes: handing a new address to an element that's playing makes it
-      // jump (a click in the sound) before the new one starts.
-      if (!el.paused) el.pause()
+      // `pause()` on an element that is loading (a `play()` still waiting on its source)
+      // aborts that play with `AbortError`, which read as a refused stream and was retried —
+      // the retry pausing the next, so a song never got past its first second (2026-11-27).
+      if (!el.paused && el.readyState > 2) window.westplayPauseOwn?.(el) ?? el.pause()
       el.src = url
       el.volume = player.volume
       if (autoplay) {
@@ -1457,7 +2049,7 @@
       player.shuffle = msg.shuffle ?? player.shuffle
       loadCurrent(true)
     },
-    pause: () => audio().pause(),
+    pause: () => window.westplayPauseOwn?.(audio()) ?? audio().pause(),
     next: () => step(1),
     previous: () => step(-1),
     seek: (msg) => {
@@ -1501,10 +2093,18 @@
     spectrum: (data) => sound?.spectrum(data.on),
   }
 
-  window.chrome?.webview?.addEventListener('message', ({ data }) => {
+  /**
+   * One of the host's messages, as a command.
+   *
+   * Two ways in, both to this one place: `chrome.webview`'s own message event, and
+   * `window.westplayRun` — which the host calls through `ExecuteScript` instead
+   * (`qq_music.rs`'s `post_script`). A page that is a whole site of the site's own (`y.qq.com`)
+   * can bring its own `chrome.webview` handlers and lose a posted one; Bilibili's page is reached
+   * the same way, for the same reason (`bilibili.rs`'s `pass_script`).
+   */
+  const run = (data) => {
     if (data?.action === 'credential') {
       savedCookie = typeof data.cookies === 'string' ? data.cookies : ''
-      // A sign-in (or another account's): the feed kept is another's now.
       homeCache = null
       saveCredential()
       post({ signedIn: savedCred != null || savedCookie !== '', playing: false, avatar: null })
@@ -1517,9 +2117,19 @@
       Promise.resolve(CONTROLS[data?.action]?.(data)).catch((error) => {
         // Said, so a control that fails isn't just nothing happening (the app showed the same
         // screen either way).
-        post({ qqProbe: '' + String(data?.action) + ' FAILED: ' + (error && (error.stack || error.message || error)) })
+        post({ qqProbe: '' + String(data?.action) + ' FAILED: ' + (error && (error.stack || error.message || "")) })
       })
-  })
+  }
+
+  window.westplayRun = (json) => {
+    try {
+      run(typeof json === 'string' ? JSON.parse(json) : json)
+    } catch (error) {
+      // A command of neither shape: nothing to do with it.
+    }
+  }
+
+  window.chrome?.webview?.addEventListener('message', ({ data }) => run(data))
 
   // The page is ready: report the real login state. A restored cookie/credential from the persisted profile
   // means the session survived the restart, so report signed in; otherwise nothing plays yet.
