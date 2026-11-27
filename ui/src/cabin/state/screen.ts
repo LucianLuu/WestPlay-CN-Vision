@@ -233,7 +233,10 @@ const PROFILES: readonly ProfileEntry[] = [
   // (owner 2026-11-12, 13). At 1.2, chosen by eye in the cab preview: three columns of apps. Two sidebar apps (owner
   // 2026-11-13, after seeing three).
   { layout: 'man-lions-24', profile: { name: "MAN Lion's Coach (2024)", oemStrip: null, scale: 1.2, recents: 2 } },
-    { layout: 'man-tgx-2020', profile: { name: 'MAN TGX 2020', oemStrip: null, scale: 1 } },
+  // The Coaches DLC's Volvo 9700 DD, on its centre screen as the MAN Lion's Coach is on its own (the same 1.2 and
+  // two sidebar apps: PR 9, its page laid out at the display's shape by `page_height`).
+  { layout: 'volvo-9700-dd', profile: { name: 'Volvo 9700 DD', oemStrip: null, scale: 1.2, recents: 2 } },
+  { layout: 'man-tgx-2020', profile: { name: 'MAN TGX 2020', oemStrip: null, scale: 1 } },
 ]
 
 /** The sidebar's buttons on every screen: the tablet's twice their first size (owner 2026-11-11: smaller than a finger
