@@ -173,10 +173,9 @@ pub struct GraphicsSettings {
     pub frame_rate: FrameRate,
 }
 
-/// 车机屏幕画的帧率：3.0 那边叫 `30` / `60` / `display`，我们这边本来就是
-/// [`RefreshRate`]（`30` / `60`）。两张表接成一张：`30` 就是 `Hz30`，`60` 和
-/// `display` 都是 `Hz60`（我们不跟屏幕自己的刷新率走——车机屏是合成出来的，
-/// 跟它没意义）。
+/// 车机屏幕画的帧率：3.0 那边叫 `30` / `60` / `display`，和 [`RefreshRate`] 一一对应
+/// （3.0.0-beta.1 的方案，2026-11-28 起照它的意思办）：`display` 是「显示器刷新率」，
+/// 页面画多快就交多快，不再按 60 压。
 ///
 /// 3.0 的界面写的是 `graphics.frameRate`，车的设置页写的是 `screen.refreshRate`；
 /// 两边指的同一件事，所以写这个字段时一并写 [`ScreenSettings::refresh_rate`]
@@ -190,7 +189,7 @@ pub enum FrameRate {
     #[default]
     #[serde(rename = "60")]
     Fps60,
-    /// 3.0 的「跟随显示器」：我们按 60 处理。
+    /// 显示器刷新率（3.0 的「跟随显示器」）：页面画的每一帧都交给游戏。
     #[serde(rename = "display")]
     Display,
 }
@@ -199,7 +198,8 @@ impl From<FrameRate> for RefreshRate {
     fn from(rate: FrameRate) -> Self {
         match rate {
             FrameRate::Fps30 => RefreshRate::Hz30,
-            FrameRate::Fps60 | FrameRate::Display => RefreshRate::Hz60,
+            FrameRate::Fps60 => RefreshRate::Hz60,
+            FrameRate::Display => RefreshRate::Display,
         }
     }
 }
@@ -209,6 +209,7 @@ impl From<RefreshRate> for FrameRate {
         match rate {
             RefreshRate::Hz30 => FrameRate::Fps30,
             RefreshRate::Hz60 => FrameRate::Fps60,
+            RefreshRate::Display => FrameRate::Display,
         }
     }
 }
@@ -431,9 +432,10 @@ pub struct ScreenSettings {
     pub tablet_first: bool,
 }
 
-/// The screen's refresh rate: how often WestPlay's screen is redrawn for the game, 60 Hz as the game's own
-/// screens are, or 30 Hz to lighten the load on a lesser machine (the owner's ask, 2026-10-31). It is what
-/// `capture` publishes at; the cabin page draws its map at the same rate (`maps/frameCap.ts`).
+/// The screen's refresh rate: how often WestPlay's screen is redrawn for the game (Settings › Display &
+/// Performance › Screen Refresh Rate). 60 Hz as the game's own screens are; 30 Hz to lighten the load on a
+/// lesser machine (the owner's ask, 2026-10-31); or the display's own rate, where every frame the page draws
+/// is handed to the game (3.0.0-beta.1's scheme, taken over 2026-11-28). It is what `capture` publishes at.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RefreshRate {
     #[default]
@@ -441,14 +443,18 @@ pub enum RefreshRate {
     Hz60,
     #[serde(rename = "30")]
     Hz30,
+    /// 显示器刷新率：页面画多快就交多快 (`hz()` returns 0, which `capture` reads as "no waiting").
+    #[serde(rename = "display")]
+    Display,
 }
 
 impl RefreshRate {
-    /// Frames a second it publishes (`capture::interval_for`).
+    /// Frames a second it publishes (`capture::interval_for`); 0: every frame the page draws, no interval.
     pub fn hz(self) -> u32 {
         match self {
             Self::Hz60 => 60,
             Self::Hz30 => 30,
+            Self::Display => 0,
         }
     }
 }
@@ -533,6 +539,21 @@ fn migrate(mut file: serde_json::Value, version: u32) -> serde_json::Value {
     {
         *key = serde_json::Value::from(named.virtual_key());
     }
+    // 车机屏幕的帧率和 3.0 的「卡车屏幕」页共用一档（`screen.refreshRate` / `graphics.frameRate`）：
+    // 旧文件只有前者，补上后者，免得默认的 60 把这台机器的 30 覆盖掉。
+    if file.pointer("/graphics/frameRate").is_none()
+        && let Some(rate) = file
+            .pointer("/screen/refreshRate")
+            .and_then(serde_json::Value::as_str)
+            .filter(|rate| matches!(*rate, "30" | "60" | "display"))
+            .map(str::to_owned)
+        && let Some(object) = file.as_object_mut()
+    {
+        let graphics = object.entry("graphics").or_insert_with(|| serde_json::Value::Object(Default::default()));
+        if let Some(graphics) = graphics.as_object_mut() {
+            graphics.insert("frameRate".into(), serde_json::Value::from(rate));
+        }
+    }
     file
 }
 
@@ -540,7 +561,17 @@ fn migrate(mut file: serde_json::Value, version: u32) -> serde_json::Value {
 pub fn parse(json: &str) -> Result<Settings, serde_json::Error> {
     let file: serde_json::Value = serde_json::from_str(json)?;
     let version = file.get("version").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
-    serde_json::from_value(migrate(file, version))
+    let settings: Settings = serde_json::from_value(migrate(file, version))?;
+    Ok(aligned(settings))
+}
+
+/// The two fields that hold the screen's frame rate made to agree: `graphics.frameRate` is what 3.0's
+/// 「卡车屏幕」页 writes, `screen.refreshRate` what the cab's own Settings writes, and the capture reads
+/// the latter. A page that wrote only the former would otherwise change nothing, so the latter follows it.
+pub fn aligned(mut settings: Settings) -> Settings {
+    let rate = RefreshRate::from(settings.graphics.frame_rate);
+    settings.screen.refresh_rate = rate;
+    settings
 }
 
 pub fn to_json(settings: &Settings) -> String {
@@ -659,7 +690,7 @@ mod tests {
             },
             graphics: GraphicsSettings {
                 gpu: Some("10de:2702:00000000:161".into()),
-                frame_rate: FrameRate::Display,
+                frame_rate: FrameRate::Fps30,
             },
             sound: SoundSettings {
                 equalizer: crate::speakers::Equalizer { bass: -3, mid: 1, treble: 2 },
@@ -680,7 +711,7 @@ mod tests {
         assert!(json.contains("\"truckStrip\": \"off\""), "{json}");
         assert!(json.contains("\"refreshRate\": \"30\""), "{json}");
         assert!(json.contains("\"tabletFirst\": true"), "{json}");
-        assert!(json.contains("\"frameRate\": \"display\""), "{json}");
+        assert!(json.contains("\"frameRate\": \"30\""), "{json}");
         assert!(json.contains("\"startMinimised\": true"), "{json}");
         assert!(json.contains("\"tray\": true"), "{json}");
         assert!(json.contains("\"spatial\": false"), "{json}");
@@ -813,6 +844,19 @@ mod tests {
     #[test]
     fn unknown_fields_are_ignored() {
         assert_eq!(parse(r#"{"version": 9, "futureThing": [1, 2]}"#).unwrap(), Settings::default());
+    }
+
+    #[test]
+    fn the_screens_rate_is_one_setting_in_two_fields() {
+        // 旧文件只有车的设置页那一份：3.0 的那份补上，不会退回默认的 60。
+        let legacy = parse(r#"{"version": 1, "screen": {"refreshRate": "30"}}"#).unwrap();
+        assert_eq!(legacy.screen.refresh_rate, RefreshRate::Hz30);
+        assert_eq!(legacy.graphics.frame_rate, FrameRate::Fps30);
+
+        // 3.0 的「卡车屏幕」页写的那一份是这里读的：车那一份跟着走。
+        let written = parse(r#"{"screen": {"refreshRate": "30"}, "graphics": {"frameRate": "display"}}"#).unwrap();
+        assert_eq!(written.screen.refresh_rate, RefreshRate::Display);
+        assert_eq!(written.screen.refresh_rate.hz(), 0);
     }
 
     #[test]

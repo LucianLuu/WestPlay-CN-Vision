@@ -156,8 +156,8 @@ export type HostMessage =
       equalizerCustom?: boolean
       /** The language chosen in the companion (a game code, `de_de`); `null`: the game's. */
       language?: string | null
-      /** How often WestPlay hands the game a new frame, chosen in Settings › Display & Performance (`'60'` or
-       * `'30'`: `westplay_host::settings::RefreshRate`). Older hosts send none, meaning 60. */
+      /** How often WestPlay hands the game a new frame, chosen in Settings › Display & Performance (`'60'`,
+       * `'30'`, or `'display'`: `westplay_host::settings::RefreshRate`). Older hosts send none, meaning 60. */
       refreshRate?: string
       /** Whether the screen gives up some of its effects to run lighter, chosen in Settings › Display &
        * Performance (`westplay_host::settings::ScreenSettings::performance_mode`). An older host sends none,
@@ -489,7 +489,7 @@ eteaseAnswer with the same id. */
   /** The page asks the layer to forget its account (the layer itself is told over the loopback). */
   | { type: 'neteaseSignOut' }  /** What the Safari app asks of its pages (`westplay_host::safari::Command`). */
   | { type: 'safari'; command: SafariCommand }
-  | { type: 'refreshRate'; rate: '60' | '30' }
+  | { type: 'refreshRate'; rate: '60' | '30' | 'display' }
   | { type: 'trafficLights'; on: boolean }
   | { type: 'performanceMode'; on: boolean }
   | { type: 'spatial'; on: boolean }

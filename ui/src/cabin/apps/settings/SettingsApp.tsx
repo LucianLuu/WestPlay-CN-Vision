@@ -5,7 +5,7 @@ import { smoothThrough } from './curve'
 import { useWallpapers } from '../../state/looks'
 import { pickVariant, prepareWallpaper } from '../../wallpapers'
 import { type Appearance, resolveAppearance } from '../../state/appearance'
-import { REFRESH_RATES } from '../../state/refreshRate'
+import { REFRESH_RATES, type RefreshRate } from '../../state/refreshRate'
 import { useAppIcon, useLook, useScreenProfile } from '../../state/hooks'
 import { engineName, SEARCH_ENGINES } from '../safari/address'
 import {
@@ -965,10 +965,21 @@ function SwitchRow({ on, onToggle, ...start }: RowLabel & { on: boolean; onToggl
 
 /**
  * Display & Performance (owner 2026-11-01): the two settings about what the screen costs. The refresh rate is
- * how often WestPlay hands the game a new frame (the host publishes at it, and the map is drawn at it); the
- * Performance Mode is what the page gives up for a lesser machine — the map's 3D buildings, the frosted glass
- * and the animations (cabin/performance.css).
+ * how often WestPlay hands the game a new frame (the host publishes at it: 30, 60, or every frame the page
+ * draws, the display's own rate — 3.0.0-beta.1's scheme); the Performance Mode is what the page gives up for a
+ * lesser machine — the map's 3D buildings, the frosted glass and the animations (cabin/performance.css).
  */
+
+function rateLabel(text: ReturnType<typeof useText>, rate: RefreshRate): string {
+  switch (rate) {
+    case '60':
+      return text.settings.hz60
+    case '30':
+      return text.settings.hz30
+    case 'display':
+      return text.settings.hzDisplay
+  }
+}
 
 function DisplayPage() {
   const text = useText()
@@ -988,7 +999,7 @@ function DisplayPage() {
                 aria-pressed={rate === refreshRate}
                 onClick={() => chooseRefreshRate(rate)}
               >
-                {rate === '60' ? text.settings.hz60 : text.settings.hz30}
+                {rateLabel(text, rate)}
               </button>
             ))}
           </div>
