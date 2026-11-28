@@ -495,7 +495,7 @@ fn look_at_game_mods(game: &Game, looked: &mut HashMap<PathBuf, ModsStamp>) {
     // YTHQ Tablet's own screens too: installed since the mod was made, or updated (its scripts are the trucks'
     // factory screens with it).
     let workshop = game.workshop();
-    let ythq_current = game_mod::ythq_screens_current(game.kind, workshop.as_deref(), &ours);
+    let ythq_current = game_mod::ythq_screens_current(game.kind, workshop.as_deref(), &ours, &files);
     let marks = cab_mark::for_tablet(&files, &mods, &mod_trucks, &profiles_mods(game));
     let marks_current = cab_mark::current(&marks, &ours);
     if wanted != present || !game_screens_current || !ythq_current || !marks_current || !addons_current(&ours) {
@@ -524,7 +524,7 @@ fn look_at_game_mods(game: &Game, looked: &mut HashMap<PathBuf, ModsStamp>) {
         log!(
             "setup: WestPlay's mod made again: the tablet at {} places (was {}), {} of them the mods' trucks'; the \
              cab's mark in {} dashboards; YTHQ Tablet's screens patched: {} (its tablets' own: {}, their definitions: \
-             {}, their screen materials: {})",
+             {}, their screen materials: {}); its interiors kept as the game's: {}",
             wanted.len(),
             present.len(),
             wanted.iter().filter(|spot| mod_trucks.contains(spot)).count(),
@@ -532,7 +532,8 @@ fn look_at_game_mods(game: &Game, looked: &mut HashMap<PathBuf, ModsStamp>) {
             built.ythq.len(),
             built.ythq_tablets.len(),
             built.ythq_accessories.len(),
-            built.ythq_tablet_materials.len()
+            built.ythq_tablet_materials.len(),
+            built.ythq_stock
         );
         if let Some(problem) = &built.ythq_problem {
             log!("setup: of YTHQ Tablet's own screens, not patched: {problem}");

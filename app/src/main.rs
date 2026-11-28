@@ -446,6 +446,9 @@ fn get_settings(store: State<SettingsStore>) -> Settings {
 /// the settings as saved are returned and announced to every window (`settings-changed`).
 #[tauri::command]
 fn update_settings(settings: Settings, store: State<SettingsStore>, app: AppHandle) -> Result<Settings, String> {
+    // 车机屏幕的帧率两个字段各写一份（3.0 的「卡车屏幕」页写 `graphics.frameRate`，车的设置页写
+    // `screen.refreshRate`）：页面只改了前者时，这里让后者跟上来，抓帧那边才真的变。
+    let settings = westplay_host::settings::aligned(settings);
     store.file.save(&settings).map_err(|e| format!("Couldn't save the settings: {e}"))?;
     store.shared.set(settings.clone());
     let _ = app.emit("settings-changed", &settings);

@@ -736,6 +736,25 @@ impl QqMusic {
         std::fs::remove_file(user_data.join(SESSION_FILE))
     }
 
+    /// Drops the profile's own cookie store, with no page to clear them through: the browser keeps
+    /// the account in a file of its profile (`EBWebView/Default/Network/Cookies`), so signing out
+    /// with the player closed left it signed in at the next start (owner 2026-11-28: the account
+    /// came back after a sign-out). Both layouts are tried, `Network`'s first.
+    pub fn forget_profile_cookies(user_data: &Path) -> std::io::Result<()> {
+        let mut gone = Ok(());
+        for folder in ["EBWebView/Default/Network", "EBWebView/Default"] {
+            for name in ["Cookies", "Cookies-journal"] {
+                let path = user_data.join(folder).join(name);
+                match std::fs::remove_file(&path) {
+                    Ok(()) => crate::log!("[qq music] its profile's cookies dropped: {}", path.display()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => gone = Err(error),
+                }
+            }
+        }
+        gone
+    }
+
     /// Keeps `cookies` for the next start without a page to hand them to: the companion's sign-in
     /// window took them while QQ Music's own player wasn't running, and `start` reads the file back as
     /// it opens (`restore_cookie`). Without it that sign-in was lost, and the app went on with no
@@ -867,9 +886,12 @@ fn read_message(message: &str) -> Option<Message> {
                 answer.lyrics = answer.lyrics.map(crate::lyrics::Lyrics::checked);
                 Some(Message::Answer(Box::new(answer)))
             }
-            // An answer that doesn't read: failed, so the app isn't left waiting.
-            Err(_) => {
+            // An answer that doesn't read: failed, so the app isn't left waiting — and why it didn't,
+            // with the start of what the page sent, so a blank page in the cab says something here.
+            Err(error) => {
                 let id = value.get("answer").and_then(serde_json::Value::as_u64)?;
+                let raw: String = message.chars().take(600).collect();
+                crate::log!("[qq music] answer {id} didn't read ({error}): {raw}");
                 Some(Message::Answer(Box::new(Answer {
                     answer: u32::try_from(id).ok()?,
                     failed: true,
@@ -897,6 +919,12 @@ fn read_message(message: &str) -> Option<Message> {
         "avatar": state.and_then(|s| s.avatar.as_deref()),
     })
     .to_string()
+}
+
+/// `{"type":"qqMusic","signedIn":false,…}`: the account went, its page's player not running any more to
+/// say so (the sign-out button's own answer, so the cab shows signed out at once).
+pub fn signed_out_message() -> String {
+    serde_json::json!({ "type": "qqMusic", "signedIn": false, "playing": false, "avatar": null }).to_string()
 }
 
 /// `{"type":"qqMusicAnswer","id":…,"home":{…}}`: QQ Music's answer to the app's question.

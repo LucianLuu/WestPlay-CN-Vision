@@ -915,13 +915,20 @@
    * list shows anyway.
    */
   const RADAR_PAGES = 1
-  /** A chart's own songs, its first `limit` of them (`named` gives each entry's `data`). */
+  /**
+   * A chart's own songs, its first `limit` of them.
+   *
+   * Each entry is the song's rank with the song under `data`, and the song comes in the site's own
+   * names (`songmid`, `songname`, `albummid`, …): unwrapped but not renamed, a row showed the artist
+   * where the song's name belongs and no cover at all (owner 2026-11-28). `songNamed` gives it the
+   * names every reader here was written against, as `named` does for a list asked through `get`.
+   */
   const fetchChart = async (topid, limit) => {
     const found = await cgi(
       '/v8/fcg-bin/fcg_v8_toplist_cp.fcg',
       new URLSearchParams({ format: 'json', topid: String(topid) }),
     )
-    return (found.songlist ?? []).slice(0, limit).map((one) => one?.data ?? one)
+    return (found.songlist ?? []).slice(0, limit).map((one) => songNamed(one?.data ?? one))
   }
   const fetchRadar = async () => {
     const seen = new Set()
@@ -1071,7 +1078,9 @@
         lists.push({ title: '新歌', style: 'songs', items: [], songs: fresh.map(safeTrack) })
       }
       if (picks.length > 0) {
-        lists.push({ title: '猜你喜欢', style: 'songs', items: [], songs: picks })
+        // The radar's own names, as the app's track reads them: a raw site song went into the
+        // answer once and the whole home failed to read (`color` missing, 2026-11-28).
+        lists.push({ title: '猜你喜欢', style: 'songs', items: [], songs: picks.map(safeTrack) })
       }
       // The site's own order kept: the cards first (为你推荐, 你的宝藏歌单), then its charts and its
       // wall, then the lists to play.
@@ -1452,7 +1461,7 @@
   const answer = async (id, question) => {
     const asked = QUESTIONS[question?.ask]
     if (!asked) {
-      post({ answer: id, failed: true })
+      post({ answer: id, failed: true, why: 'no question for ' + String(question?.ask) })
       return
     }
     let why = ''
@@ -1464,7 +1473,7 @@
         return
       } catch (error) {
         // Once more, or failed — and why, said so a failed question isn't only "nothing came back".
-        why = text(error?.stack ?? error?.message ?? error).slice(0, 300)
+        why = String((error && (error.stack || error.message || error)) || '').slice(0, 300)
       }
     }
     post({ answer: id, failed: true, why })
@@ -2104,7 +2113,11 @@
    */
   const run = (data) => {
     if (data?.action === 'credential') {
-      savedCookie = typeof data.cookies === 'string' ? data.cookies : ''
+      const cookies = typeof data.cookies === 'string' ? data.cookies : ''
+      savedCookie = cookies
+      // 退出登录（宿主发来的 cookies 是空的）：扫码留下的那份凭据也一起丢掉。不然它被写回 localStorage，
+      // 下一页又读回来，报告“已登录”——账号就这么回来了（2026-11-28：点退出登录，账号没退）。
+      if (!cookies) savedCred = null
       homeCache = null
       saveCredential()
       post({ signedIn: savedCred != null || savedCookie !== '', playing: false, avatar: null })

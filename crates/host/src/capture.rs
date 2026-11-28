@@ -1,8 +1,9 @@
 //! Captures the offscreen WebView2 visual with Windows Graphics Capture and publishes frames into the
-//! shared texture, at most [`MAX_FPS`] per second. WGC only delivers frames when the content changes, so
-//! an idle UI costs nothing; and so a frame that arrives before it's due is kept, not dropped, and goes out
-//! when it is: dropped, it might be the last of an animation or a cursor move, and nothing would come to
-//! replace it.
+//! shared texture: at most [`MAX_FPS`] per second for the 30/60 Hz settings, or every frame the page draws
+//! when the screen follows the display's own rate (3.0.0-beta.1's scheme). WGC only delivers frames when the
+//! content changes, so an idle UI costs nothing; and so a frame that arrives before it's due is kept, not
+//! dropped, and goes out when it is: dropped, it might be the last of an animation or a cursor move, and
+//! nothing would come to replace it.
 //!
 //! The screen's cursor is drawn here, over each frame as it goes out (`cursor.rs`): the page's frame is kept
 //! as captured, and as the cursor moves it goes out again from there with the cursor where it is now, the page
@@ -38,7 +39,8 @@ use crate::brightness::{self, Dimmer};
 use crate::cursor::{Look, Painter, Placement};
 use crate::gpu::{Gpu, Lock, SharedFrame};
 
-/// Frames per second published to the game. Chromium renders at the monitor's refresh rate.
+/// Frames per second published to the game for the 30/60 Hz settings. Chromium renders at the monitor's
+/// refresh rate; the display's own rate is published as it draws (no interval, `interval_for`).
 pub const MAX_FPS: u32 = 60;
 const FRAME_INTERVAL: Duration = Duration::from_micros(1_000_000 / MAX_FPS as u64);
 /// Tolerance for capture timing jitter.
@@ -167,7 +169,8 @@ impl Capture {
         self.painter.is_some()
     }
 
-    /// Frames this is to publish a second from here on (the player's Screen Refresh Rate: [`interval_for`]).
+    /// Frames this is to publish a second from here on (the player's Screen Refresh Rate: [`interval_for`]);
+    /// 0, the display's own rate, publishes every frame the page draws.
     pub fn set_fps(&self, fps: u32) {
         self.mailbox.set_interval(interval_for(fps));
     }
@@ -574,8 +577,7 @@ mod tests {
     }
 
     #[test]
-    fn stays_on_schedule_without_a_backlog_after_idling() {
-        let start = Instant::now();
+    fn stays_on_schedule_without_a_backlog_after_idling() {        let start = Instant::now();
         let mailbox = Mailbox::new(start, FRAME_INTERVAL);
         mailbox.put(0);
         flush(&mailbox, start, |_| true);
@@ -596,6 +598,23 @@ mod tests {
         mailbox.put(101);
         assert_eq!(flush(&mailbox, later + FRAME_INTERVAL / 2, |_| true), None);
         assert_eq!(flush(&mailbox, later + FRAME_INTERVAL, |_| true), Some(true));
+    }
+
+    /// The display's own rate: no interval at all, so every frame the page draws goes out (no longer 60 a
+    /// second with the rest dropped, as before 2026-11-28).
+    #[test]
+    fn the_displays_own_rate_waits_for_no_frame() {
+        let start = Instant::now();
+        let mailbox = Mailbox::new(start, interval_for(0));
+        let mut published = 0;
+        for i in 0..=165u32 {
+            let now = start + Duration::from_micros(1_000_000 / 165 * u64::from(i));
+            mailbox.put(i);
+            if flush(&mailbox, now, |_| true) == Some(true) {
+                published += 1;
+            }
+        }
+        assert_eq!(published, 166, "{published} in a second");
     }
 
     /// What's under the cursor read from a frame on this PC's GPU: dark over its dark half, light over its light half,
@@ -683,8 +702,12 @@ mod tests {
 }
 
 /// The interval a screen's refresh rate asks for (the settings' Screen Refresh Rate), kept within what the
-/// game's own frames allow: at least [`MAX_FPS`] a second's worth, and never none.
+/// game's own frames allow: at least [`MAX_FPS`] a second's worth, and never none — but 0, the display's own
+/// rate, asks for no interval at all: every frame the page draws goes out.
 fn interval_for(fps: u32) -> Duration {
+    if fps == 0 {
+        return Duration::ZERO;
+    }
     let capped = fps.clamp(1, MAX_FPS);
     Duration::from_micros(1_000_000 / capped as u64)
 }

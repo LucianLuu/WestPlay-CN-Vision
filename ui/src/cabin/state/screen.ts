@@ -59,8 +59,10 @@ const PAGE_HEIGHTS: Partial<Record<ScreenLayoutId, number>> = {
   'ob-gps': 744,
   'scania-touring': 730,
   'man-lions-24': 784,
-    'volvo-9700-dd': 697,
-  'man-tgx-2020': 720,
+  'volvo-9700-dd': 697,
+  // The MAN TGX 2020's panel: its display is the left 956 x 540 of it (the lion badge and the front mirror's
+  // screen take the rest), 1.770:1, so 723 — the page on that part, not stretched over the whole panel.
+  'man-tgx-2020': 723,
   'bronco-24': 800,
   'f150-2023': 800,
   cascadia: 480,

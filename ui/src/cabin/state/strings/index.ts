@@ -486,6 +486,7 @@ export interface Strings {
     displayPerformance: string
     hz30: string
     hz60: string
+    hzDisplay: string
     maps: string
     refreshRate: string
     refreshRateFooter: string

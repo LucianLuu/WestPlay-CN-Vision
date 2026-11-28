@@ -103,6 +103,9 @@ pub fn page_height(index: usize) -> u32 {
         // The Volvo 9700 DD's centre display measures 14.26 x 7.77 cm on its interior model.
         Some("volvo-9700-dd") => 697,
         Some("westernstar-57x") => 480,
+        // The MAN TGX 2020's panel: its display is the left 956 x 540 of the 1440-wide panel (the lion badge and
+        // the front mirror's screen take the rest; crates/setup game_mod.rs `SHOWN_PARTS`), 1.770:1, so 1280 x 723.
+        Some("man-tgx-2020") => 723,
         _ => SCREEN_HEIGHT,
     }
 }
@@ -305,9 +308,11 @@ const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
     // The game's toy GPS (Cabin Accessories), WestPlay's only on Oyuncuyusbis' coaches' Gps parts ([`OB_GPS_GLASS`]).
     ("ob-gps", &["setra516hd", "t16shd", "setradt531", "manlions"]),
     // YTHQ Tablet's screen script for the Iveco S-Way is the MAN TGX 2020's too (`crates/setup`'s
-    // YTHQ patches: the truck's `computers*.sui` name YTHQ's script for both), so that screen is
-    // not WestPlay's own to take.
-    ("iveco-sway", &["iveco.sway"]),
+    // YTHQ patches: the trucks' `computers*.sui` name YTHQ's script for both). It's a 256 x 256 canvas the
+    // game stretches over each truck's whole screen surface, its WestPlay element the surface whole, so the
+    // page drawn on it is the TGX 2020's too (owner 2026-11-28: with the tablet fitted the TGX's screen kept
+    // the game's own, WestPlay's only on the tablet whatever the display priority said).
+    ("iveco-sway", &["iveco.sway", "man.tgx_2020"]),
 ];
 
 /// The buses' screens WestPlay is on (the Coaches DLC's own, the bus mods' Gps parts): in a bus the WestPlay tablet,
@@ -1171,6 +1176,8 @@ mod tests {
         // The Coaches DLC's: 1280 x 730 is 1.753:1 (the Scania Touring's 1.754), 784 1.633 (the MAN Lion's Coach's).
         assert_eq!(page_height(index("scania-touring")), 730);
         assert_eq!(page_height(index("man-lions-24")), 784);
+        // The MAN TGX 2020's display, the left 956 x 540 of its panel: 1.770:1, so 723.
+        assert_eq!(page_height(index("man-tgx-2020")), 723);
         assert_eq!(page_height(index("daf-2021")), SCREEN_HEIGHT);
         assert_eq!(page_height(index("renault-t-2024")), SCREEN_HEIGHT);
         assert_eq!(page_height(screen_layouts().len()), SCREEN_HEIGHT);
@@ -1326,6 +1333,9 @@ mod tests {
         // A truck's own layout is its own.
         assert!(screen_supported(layout("daf-2021"), "vehicle.daf.2021"));
         assert!(screen_supported(layout("iveco-sway"), "vehicle.iveco.sway"));
+        // YTHQ Tablet's script of the two (each truck's `computers*.sui` names it with the tablet fitted).
+        assert!(screen_supported(layout("iveco-sway"), "vehicle.man.tgx_2020"));
+        assert!(!screen_supported(layout("iveco-sway"), "vehicle.volvo.fh16_2012"));
         assert!(!screen_supported(screen_layouts().len(), "vehicle.scania.s_2016"));
 
     }

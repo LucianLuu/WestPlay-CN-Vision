@@ -776,30 +776,46 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         .filter(|app| app.site() == which.app())
                         .map(|app| app.environment().clone())
                 };
-                // Signed out of QQ Music: its own player is told at once, not when the window gets
-                // round to saying it (the player may close that window): the kept session goes and the
-                // page forgets the account, or the cab went on as the account it just left.
+                // QQ Music's sign-out is done here, on its own page: a window of its own opened
+                // `portal/profile.html` and signed nothing out — the account stayed where it was
+                // (owner 2026-11-28). No window is opened for it any more.
                 if action == AccountAction::SignOut && which == weblogin::Site::QqMusic {
-                    // Its own player goes first: the page holds the account in memory, and put its
-                    // cookies back the moment they were cleared. Closed, wiped and rebuilt on the next
-                    // ask, the next sign-in finds nothing to sign in with — a page of its own to choose
-                    // an account on, as every other site's (owner 2026-11-19).
-                    if let Some(app) = qq_music.take() {
-                        app.close(&stage);
-                        log!("[qq music] its player closed for the sign-out");
-                    }
-                    // Its page, when it runs; its kept file either way — the window the player is left
-                    // looking at only says it's done once they close it (weblogin.rs `QQ_MUSIC_OUT`),
-                    // and without this the cab went on as the account they just left (owner 2026-11-19).
-                    let cleared = match &qq_music {
-                        Some(app) => app.sign_out().map_err(|error| error.message().to_owned()),
+                    // Signed out while its page still holds the account: `sign_out` drops the kept
+                    // file, tells the page, and deletes the profile's own cookies (the account
+                    // itself). Closed first — as it was until 2026-11-28 — that last step never ran,
+                    // and the next page came back as the account just left.
+                    let cleared = match qq_music.take() {
+                        Some(app) => {
+                            let cleared = app.sign_out().map_err(|error| error.message().to_owned());
+                            app.close(&stage);
+                            log!("[qq music] its player closed for the sign-out");
+                            cleared
+                        }
+                        // No page to clear them through: its profile's cookie store goes instead, or
+                        // the next page it opens signs the account back in (`forget_session` alone
+                        // only drops WestPlay's own copy).
                         None => {
-                            qq_music::QqMusic::forget_session(&config.data_dir.join("webview2-qq-music"))
-                                .map_err(|error| error.to_string())
+                            let user_data = config.data_dir.join("webview2-qq-music");
+                            let kept = qq_music::QqMusic::forget_session(&user_data)
+                                .map_err(|error| error.to_string());
+                            let jar = qq_music::QqMusic::forget_profile_cookies(&user_data)
+                                .map_err(|error| error.to_string());
+                            kept.and(jar)
                         }
                     };
                     log!("[qq music] signed out: its session cleared ({cleared:?})");
-                }
+                    // 页面跟着关了，没有谁会再说“已退出”：直接告诉车机，退出登录按钮按下就有反应
+                    // （2026-11-28：按钮按了像没按）。伴侣窗口的账号页同理，不开窗口也能知道
+                    // （`tell_signed_in`）。
+                    let _ = webview.post_json(&qq_music::signed_out_message());
+                    web_logins.tell_signed_in(which, false);
+                    // 车机里那个应用按的退出：它没有页面就没人答复（一直转圈），退出后的匿名页立刻
+                    // 起来——原先要等退出窗口关掉才起（`web_logins.take_reports`），现在没有窗口了。
+                    if qq_music_back_after_sign_out {
+                        qq_music_back_after_sign_out = false;
+                        let _ = start_qq_music(&mut qq_music, &stage, &config);
+                    }
+                } else {
                 // Asked without the player having asked (the companion's accounts page
                 // opening): QQ Music's page is the one that knows whether the account is
                 // signed in, so a page of its own that isn't running has to be started — its
@@ -812,6 +828,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 // showed before the page was there.
                 let _ = &qq_music;
                 web_logins.command(which, action, open_in.as_ref());
+                }
             }
         }
         // Bilibili's account commands go to its own client, whose page is the one that holds the
@@ -1462,6 +1479,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     let mut settings = config.settings.get();
                     if settings.screen.refresh_rate != rate {
                         settings.screen.refresh_rate = rate;
+                        // 3.0 的「卡车屏幕」页读的是 `graphics.frameRate`：两个字段并且写着，免得对不上。
+                        settings.graphics.frame_rate = rate.into();
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
                     }
@@ -3670,7 +3689,8 @@ enum PageMessage {
     /// The truck's information bar beside WestPlay, kept or not, chosen in the cab's Settings (Appearance).
     TruckStrip { strip: settings::TruckStrip },
     /// How often WestPlay's screen is redrawn for the game, chosen in the cab's Settings (Display &
-    /// Performance): 60 Hz, or 30 Hz to lighten the load (`settings::RefreshRate`).
+    /// Performance): 60 Hz, 30 Hz to lighten the load, or the display's own rate, where every frame the page
+    /// draws reaches the game (`settings::RefreshRate`).
     RefreshRate { rate: settings::RefreshRate },
     /// Whether the next traffic light is read and shown (Settings › Maps): off, the host stops reading the
     /// game's memory and the worker closes its handle.
@@ -4061,6 +4081,10 @@ mod tests {
         assert_eq!(
             parse_page_message(r#"{"type":"refreshRate","rate":"30"}"#),
             Some(PageMessage::RefreshRate { rate: crate::settings::RefreshRate::Hz30 })
+        );
+        assert_eq!(
+            parse_page_message(r#"{"type":"refreshRate","rate":"display"}"#),
+            Some(PageMessage::RefreshRate { rate: crate::settings::RefreshRate::Display })
         );
         assert_eq!(
             parse_page_message(r#"{"type":"trafficLights","on":false}"#),

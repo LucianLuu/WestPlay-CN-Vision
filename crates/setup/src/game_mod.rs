@@ -51,6 +51,11 @@ const PARKING_CAMERA_GROUP: &str = "910";
 /// The parking camera's mark's texture (`westplay_shared::PARKING_MARK_WIDTH`), in the camera's group: drawn only as
 /// the game shows the camera, so the plugin can tell WestPlay's screen is under it.
 const PARKING_MARK: &str = "parking_mark";
+/// The front mirror's material in a GPS script's front mirror page (the MAN TGX 2020's: `/material/environment/`).
+const FRONT_MIRROR_MATERIAL: &str = "front_mirror";
+/// WestPlay's screen on the truck's front mirror page ([`front_mirror_page`]): its own unit, as the "screen on" group's
+/// is the game's (its name as short as that one's: the game refuses long unit names, 2026-11-16).
+const MIRROR_SCREEN: &str = "_nameless.westplay.mirror";
 /// The draw order of WestPlay's tablet picture in YTHQ Tablet's scripts ([`TABLET_OVERLAY`]): under the truck screen's
 /// ([`SCREEN_LAYER`]), both over YTHQ's own elements (theirs use layers 0 to 16). The plugin draws frames into only
 /// one of the two, the app's "WestPlay on" setting deciding, and keeps the other's texture transparent: the one shines
@@ -123,6 +128,12 @@ const SHOWN_PARTS: &[(&str, ShownPart)] = &[
     ("volvo-fh", ShownPart { left: 0.0054, right: 0.9946, top: 0.0055, bottom: 0.9945 }),
     // The Volvo 9700 DD's centre display leaves 0.32% of the surface out on each edge (interior `gps.tobj`).
     ("volvo-9700-dd", ShownPart { left: 0.0032, right: 0.9968, top: 0.0032, bottom: 0.9968 }),
+    // The MAN TGX 2020's panel is 1440 x 540, but only its left 956 is the display: the lion badge and the
+    // front blind-spot mirror's screen sit on the rest (`man_tgx_2020_gps.sii`'s map and its 956-wide
+    // background, the badge's and the mirror's own groups to their right). Over the whole panel the picture
+    // was stretched 1.5 times wide and the badge was under it (owner 2026-11-28: "画面被拉伸了，本来应该是靠左
+    // 显示给右侧狮子标和前电子补盲镜留出空间").
+    ("man-tgx-2020", ShownPart { left: 0.0, right: 956.0 / 1440.0, top: 0.0, bottom: 1.0 }),
 ];
 
 /// A screen of the game's own whose script is a bare window (no "screen on" group): WestPlay's image goes on the part
@@ -316,6 +327,8 @@ pub struct Built {
     /// Why some of YTHQ Tablet's screen scripts aren't in the mod, if any aren't: a version without one, or one laid
     /// out otherwise than [`patch_gps_script`] expects. None if YTHQ Tablet isn't installed, or all are in.
     pub ythq_problem: Option<String>,
+    /// The trucks' and buses' interior screens files YTHQ Tablet's own are put back to the game's over ([`ythq_stock_interiors`]).
+    pub ythq_stock: usize,
 }
 
 /// Why the mod couldn't be built.
@@ -571,10 +584,12 @@ fn ythq_item(kind: crate::game::Kind) -> &'static str {
 /// (`scania-2025`, its `computers_2025*.sui`; the Scania S BEV's 7" screen names the same script but the mod makes
 /// its screens file's size its own, `SHARP_SCREENS`, which is mounted over YTHQ's). Their `gps_drawable_size`s stay
 /// YTHQ's (a render target's resolution: the texture's size and so the layout the plugin knows it by is ours). The MAN
-/// TGX 2020 shares the Iveco S-Way's script (`_h_nfb`) and its own factory screen isn't a layout of WestPlay's, so
-/// WestPlay stays off that one (`westplay_shared::SHARED_LAYOUT_TRUCKS`); its YTHQ tablet shows WestPlay's tablet
-/// layout still, as does the tablet of every truck whose YTHQ tablet accessory names one of these scripts (the game's
-/// own scripts keep their factory screens).
+/// TGX 2020 shares the Iveco S-Way's script (`_h_nfb`): the truck's interior naming it with a YTHQ tablet fitted, its
+/// 256 x 256 canvas stretched over the TGX's whole screen surface, so WestPlay's page on it is the TGX's too (owner
+/// 2026-11-28: with the tablet fitted the TGX's screen kept YTHQ's own UI, WestPlay's only on the tablet whatever the
+/// display priority said; `westplay_shared::SHARED_LAYOUT_TRUCKS` has the TGX 2020 with the S-Way). Its YTHQ tablet
+/// shows WestPlay's tablet layout still, as does the tablet of every truck whose YTHQ tablet accessory names one of
+/// these scripts (the game's own scripts keep their factory screens).
 const YTHQ_SCREENS_ETS2: &[(&str, &str)] = &[
     ("ui/dashboard/ythq_tablet_gps_mirror_nfb.sii", "volvo-fh"),
     ("ui/dashboard/uk_ythq_tablet_gps_mirror_nfb.sii", "volvo-fh"),
@@ -677,6 +692,8 @@ struct YthqScreens {
     /// Its tablets' models whose screens sample its screens' texture (YTHQ's own models: the add-ons' of them are left
     /// out of the mod, [`addons`]).
     models: Vec<String>,
+    /// The game's own interior screens files back, at the paths its own has ([`ythq_stock_interiors`]).
+    stock: Vec<(String, Vec<u8>)>,
     /// Why some of it isn't in the mod (a version laid out otherwise, its archive not read), if any.
     problems: Vec<String>,
 }
@@ -713,7 +730,11 @@ fn ythq_archives(workshop: Option<&Path>, kind: crate::game::Kind) -> Vec<Archiv
 /// as long as they all sample the trucks' own screen's texture), and kept as YTHQ has them in American Truck Simulator
 /// ([`YTHQ_FACTORY_UI`]: its tablets draw what the game draws on the trucks' screens, YTHQ's own UI and WestPlay's
 /// picture over it, its own models and definitions kept).
-fn ythq_screen_files(workshop: Option<&Path>, kind: crate::game::Kind) -> YthqScreens {
+///
+/// And the game's own interior screens files back, over its own ([`ythq_stock_interiors`]): installed, its interiors name
+/// its scripts as every one of its vehicles' factory screen's `gps_path`, a truck's own centre screen showing its UI
+/// whether or not a tablet is fitted (owner 2026-11-28: "不要让ythq把卡车原版的中控也变成他的").
+fn ythq_screen_files(workshop: Option<&Path>, kind: crate::game::Kind, game: &GameFiles) -> YthqScreens {
     let archives = ythq_archives(workshop, kind);
     if archives.is_empty() {
         return YthqScreens::default();
@@ -857,6 +878,40 @@ fn ythq_screen_files(workshop: Option<&Path>, kind: crate::game::Kind) -> YthqSc
         made.materials = materials.screens;
         made.materials.sort();
         made.files.extend(materials.files);
+    }
+    // Its interiors' screens files, back to the game's own: European Truck Simulator 2's alone (American Truck
+    // Simulator's tablets draw the factory screen's script itself, [`YTHQ_FACTORY_UI`]).
+    if !together {
+        made.stock = ythq_stock_interiors(&archives, game);
+    }
+    made
+}
+
+/// The game's own interior screens files at the paths YTHQ Tablet's own has them at
+/// (`def/vehicle/<truck|bus>/<vehicle>/interior/computers*.sui`): its own name its scripts as every vehicle's factory
+/// screen's `gps_path`, so installed it shows its UI on the truck's own centre screen, whether or not one of its tablets
+/// is fitted (owner 2026-11-28: a MAN TGX 2020's and a Volvo 9700 DD's were YTHQ's). The mod's own of those paths, the
+/// game's, leave the vehicle's screen the game's own (WestPlay's where it's a screen of WestPlay's, its tablet's own
+/// screen the tablet's picture alone). A vehicle the game hasn't (a mod's), or a file its own hasn't: nothing.
+fn ythq_stock_interiors(archives: &[Archive], game: &GameFiles) -> Vec<(String, Vec<u8>)> {
+    let mut made: Vec<(String, Vec<u8>)> = Vec::new();
+    for root in YTHQ_VEHICLES {
+        for vehicle in ythq_list(archives, root).1 {
+            let interior = format!("{root}{vehicle}/interior/");
+            for file in ythq_list(archives, &interior)
+                .0
+                .into_iter()
+                .filter(|file| file.starts_with("computers") && file.ends_with(".sui"))
+            {
+                let path = format!("{interior}{file}");
+                if made.iter().any(|(have, _)| *have == path) {
+                    continue;
+                }
+                if let Ok(Some(text)) = game.read(&path) {
+                    made.push((path, text));
+                }
+            }
+        }
     }
     made
 }
@@ -1250,14 +1305,17 @@ fn ythq_list(archives: &[Archive], dir: &str) -> (Vec<String>, Vec<String>) {
 /// Whether the mod at `built` (WestPlay's `.scs`) has YTHQ Tablet's screens as [`ythq_screen_files`] makes them from
 /// the archive in `workshop` now: not so once YTHQ Tablet is installed after the mod was made, or updated (its screen
 /// scripts are the trucks' factory screens then, and the mod's old copies are YTHQ's other version).
-pub fn ythq_screens_current(kind: crate::game::Kind, workshop: Option<&Path>, built: &Path) -> bool {
-    let made = ythq_screen_files(workshop, kind);
-    if made.files.is_empty() {
+pub fn ythq_screens_current(kind: crate::game::Kind, workshop: Option<&Path>, built: &Path, game: &GameFiles) -> bool {
+    let made = ythq_screen_files(workshop, kind, game);
+    if made.files.is_empty() && made.stock.is_empty() {
         return true;
     }
     let Ok(archive) = Archive::open(built) else { return false };
     let ours = GameFiles::new(vec![Mount::Archive(archive)]);
     made.files.iter().all(|(path, bytes)| ours.read(path).ok().flatten().as_ref() == Some(bytes))
+        // The game's own interiors files at the paths YTHQ's has them at (a mod made before they were carried has
+        // none, and YTHQ's own of those paths then win in the game: made again).
+        && made.stock.iter().all(|(path, _)| matches!(ours.read(path), Ok(Some(_))))
 }
 
 /// The mod built from `game` (the installed game, mounted), as the bytes of its `.scs` file; the tablet at the
@@ -1374,7 +1432,7 @@ pub fn build(
     // scripts the mod patches (`ythq_screens`). Its tablets' definitions are pointed at its scripts' copies
     // (`YTHQ_TABLET_DIR`) and at its tablets' own UI texture ([`YTHQ_TABLET_UI`], their models' too), so they show
     // the tablet's picture alone. Its archive not read as expected leaves the mod as it was.
-    let ythq = ythq_screen_files(workshop, kind);
+    let ythq = ythq_screen_files(workshop, kind, game);
     let covered: std::collections::BTreeSet<&str> = ythq.files.iter().map(|(path, _)| path.as_str()).collect();
     files.retain(|(path, _)| !covered.contains(path.as_str()));
     built.ythq = ythq.screens;
@@ -1383,6 +1441,14 @@ pub fn build(
     built.ythq_tablet_materials = ythq.materials;
     built.ythq_problem = (!ythq.problems.is_empty()).then(|| ythq.problems.join("; "));
     files.extend(ythq.files);
+    // The game's own interior screens files back where YTHQ Tablet's own are ([`ythq_stock_interiors`]), but not over
+    // the mod's own of a path (a coach's screens file made sharp, `bus_screens_files`).
+    for (path, text) in ythq.stock {
+        if !files.iter().any(|(have, _)| *have == path) {
+            built.ythq_stock += 1;
+            files.push((path, text));
+        }
+    }
     // Its tablets' models whose screens' materials the mod carried at paths of its own (its screens' texture again):
     // the add-ons' models of them are left out, YTHQ's own used, whose screens' faces are laid out for that texture.
     let models: std::collections::BTreeSet<String> =
@@ -1598,6 +1664,9 @@ fn field<'a>(lines: &[&'a str], block: &Block, name: &str) -> Option<&'a str> {
 /// them (the layout's mark, repeating the frame's bottom row) below it, off the screen; stretched over the part
 /// whole, they squashed the frame up to 1.6% and smeared its bottom row (its black round corners) along the
 /// screen's bottom edge (2026-11-03). The rest of the script stays as it is.
+///
+/// The script's front mirror page, if it has one ([`front_mirror_page`]), takes the screen too: the game's map is
+/// back on the display there, the camera's picture beside it.
 pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>, rows: u32) -> Result<String, String> {
     let lifted = lift_parking_camera(text)?;
     let text = lifted.as_str();
@@ -1668,6 +1737,20 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>, ro
     patched.extend(screen);
     patched.extend(lines[last_end + 1..].iter().map(|line| (*line).to_owned()));
     let patched = patched.join(newline);
+    // The script's front mirror page, if it has one ([`front_mirror_page`]): WestPlay's screen there too, over the
+    // game's map, which that page puts back on the display, beside the camera's picture (its own part of the window,
+    // so the two don't cover each other).
+    let patched = match front_mirror_page(&lines, &blocks) {
+        Some(page) => {
+            let place = |[left, right, top, bottom]: [f64; 4]| {
+                let (top, bottom) = (top - (top - bottom) * part.top, top - (top - bottom) * part.bottom);
+                let bottom = top - (top - bottom) * f64::from(rows) / f64::from(SCREEN_HEIGHT);
+                [left + (right - left) * part.left, left + (right - left) * part.right, top, bottom]
+            };
+            add_to(&patched, page.name, MIRROR_SCREEN, texture, SCREEN_LAYER, place)?
+        }
+        None => patched,
+    };
     // The parking camera's mark in its group, drawn with it: the screen under the camera then (no clicks to it).
     match parking_camera(&lines, &blocks) {
         Some(camera) => {
@@ -1710,6 +1793,38 @@ fn patch_ythq_tablet_script(text: &str, texture: &str, shown: Option<&ShownPart>
 /// A GPS script's parking camera: its group with id [`PARKING_CAMERA_GROUP`], if it has one.
 fn parking_camera<'a, 'b>(lines: &[&'a str], blocks: &'b [Block<'a>]) -> Option<&'b Block<'a>> {
     blocks.iter().find(|block| block.kind == "ui::group" && field(lines, block, "id") == Some(PARKING_CAMERA_GROUP))
+}
+
+/// A GPS script's front mirror page: the group that holds the front mirror camera's picture (a `text` with a
+/// [`FRONT_MIRROR_MATERIAL`] material), and is itself a page of the display, its parent not a group, so WestPlay's
+/// screen can go on it as it goes on the "screen on" group's page (owner 2026-11-28: "让前补盲镜这一页也显示
+/// westplay屏幕"). The MAN TGX 2020's: its group with id 200, beside the display's map, the camera's picture to the
+/// right of it (964 to 1440 across, its own part of the 1440 by 540 window). The page the game shows that one on has
+/// the game's map back on the display, WestPlay's screen off with the "screen on" group's.
+fn front_mirror_page<'a, 'b>(lines: &[&'a str], blocks: &'b [Block<'a>]) -> Option<&'b Block<'a>> {
+    let index_of = |name: &str| blocks.iter().position(|block| block.name == name);
+    let pictures: Vec<usize> = blocks
+        .iter()
+        .enumerate()
+        .filter(|(_, block)| field(lines, block, "text").is_some_and(|text| text.contains(FRONT_MIRROR_MATERIAL)))
+        .map(|(index, _)| index)
+        .collect();
+    for picture in pictures {
+        // Up the picture's parents: the group whose parent isn't one is the page, not a group inside it.
+        let mut parent = field(lines, &blocks[picture], "my_parent").and_then(index_of);
+        while let Some(index) = parent {
+            let block = &blocks[index];
+            let above = field(lines, block, "my_parent").and_then(index_of);
+            if block.kind == "ui::group"
+                && field(lines, block, "id") != Some(SCREEN_ON_GROUP)
+                && !above.is_some_and(|up| blocks[up].kind == "ui::group")
+            {
+                return Some(block);
+            }
+            parent = above;
+        }
+    }
+    None
 }
 
 /// A mark's place in a block (left, right, top, bottom, from the block's own): its left and bottom corner, in from
@@ -2158,6 +2273,11 @@ mod tests {
     /// its marks.
     const CAMERA_SCRIPT: &str = "SiiNunit\n{\nui::window : _nameless.1 {\n my_children: 2\n my_children[0]: _nameless.on\n my_children[1]: _nameless.cam\n layer: 0\n}\n\nui::group : _nameless.on {\n coords_l: 0\n coords_r: 800\n coords_t: 480\n coords_b: 0\n id: 100\n my_children: 1\n my_children[0]: _nameless.map\n layer: 1\n my_parent: _nameless.1\n}\n\nui::text : _nameless.map {\n layer: 2\n my_parent: _nameless.on\n}\n\nui::group : _nameless.cam {\n coords_l: 0\n coords_r: 800\n coords_t: 480\n coords_b: 0\n id: 910\n my_children: 3\n my_children[0]: _nameless.bg\n my_children[1]: _nameless.pic\n my_children[2]: _nameless.marks\n layer: 1\n my_parent: _nameless.1\n}\n\nui::text : _nameless.bg {\n layer: 3\n my_parent: _nameless.cam\n}\n\nui::text : _nameless.pic {\n layer: 4\n my_parent: _nameless.cam\n}\n\nui::group : _nameless.marks {\n my_children: 1\n my_children[0]: _nameless.arrows\n layer: 0\n my_parent: _nameless.cam\n}\n\nui::text : _nameless.arrows {\n layer: 5\n my_parent: _nameless.marks\n}\n\n}\n";
 
+    /// A truck's GPS script as the MAN TGX 2020's, shortened: the "screen on" group's page with the map, and the
+    /// front mirror's page beside it, the camera's picture in a group of its own there, the display's map outside
+    /// the pages (the game draws it on either).
+    const MIRROR_SCRIPT: &str = "SiiNunit\n{\nui::window : _nameless.1 {\n my_children: 3\n my_children[0]: _nameless.map\n my_children[1]: _nameless.on\n my_children[2]: _nameless.mirror\n layer: 0\n}\n\nui::text : _nameless.map {\n coords_l: 0\n coords_r: 1440\n coords_t: 80\n coords_b: 0\n layer: 1\n my_parent: _nameless.1\n}\n\nui::group : _nameless.on {\n coords_l: 0\n coords_r: 1440\n coords_t: 540\n coords_b: 0\n id: 100\n my_children: 1\n my_children[0]: _nameless.lion\n layer: 1\n my_parent: _nameless.1\n}\n\nui::text : _nameless.lion {\n layer: 2\n my_parent: _nameless.on\n}\n\nui::group : _nameless.mirror {\n coords_l: 0\n coords_r: 1440\n coords_t: 540\n coords_b: 0\n id: 200\n my_children: 2\n my_children[0]: _nameless.no_camera\n my_children[1]: _nameless.front\n layer: 1\n my_parent: _nameless.1\n}\n\nui::text : _nameless.no_camera {\n layer: 2\n my_parent: _nameless.mirror\n}\n\nui::group : _nameless.front {\n coords_l: 0\n coords_r: 1440\n coords_t: 540\n coords_b: 0\n id: 1640\n my_children: 1\n my_children[0]: _nameless.picture\n layer: 0\n my_parent: _nameless.mirror\n}\n\nui::text : _nameless.picture {\n text: \"<img src=/material/environment/front_mirror_reflection.mat xscale=stretch yscale=stretch>\"\n coords_l: 964\n coords_r: 1440\n coords_t: 440\n coords_b: 100\n layer: 3\n my_parent: _nameless.front\n}\n\n}\n";
+
     #[test]
     fn the_parking_camera_is_drawn_over_the_screen_and_the_screen_over_the_rest() {
         let patched = patch_gps_script(CAMERA_SCRIPT, "screen_man_lions_24", None, SCREEN_HEIGHT).unwrap();
@@ -2193,6 +2313,43 @@ mod tests {
         assert_eq!(CAMERA_SCRIPT.lines().count(), lifted.lines().count());
         assert_eq!(changed.len(), 5, "{changed:?}");
         assert!(changed.iter().all(|(before, after)| before.starts_with(" layer:") && after.starts_with(" layer:")));
+    }
+
+    #[test]
+    fn the_front_mirror_page_takes_the_screen_too() {
+        let shown = SHOWN_PARTS.iter().find(|(id, _)| *id == "man-tgx-2020").map(|(_, part)| part);
+        let patched = patch_gps_script(MIRROR_SCRIPT, "screen_man_tgx_2020", shown, 731).unwrap();
+        let block = |name: &str| {
+            patched.split(&format!("ui::text : {name} {{")).nth(1).unwrap_or_else(|| panic!("{name}")).split("\n}").next().unwrap().to_owned()
+        };
+        let coords = |text: &str| {
+            text.lines()
+                .filter(|line| line.trim_start().starts_with("coords_"))
+                .map(|line| line.trim().to_owned())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        // The screen's own page: as before, in the "screen on" group.
+        let page = block("_nameless.westplay.screen");
+        assert!(page.trim_end().ends_with("my_parent: _nameless.on"), "{page}");
+        // The front mirror page's: its last child, in the very same place, over its map and beside its picture.
+        assert!(
+            patched.contains(" my_children: 3\n my_children[0]: _nameless.no_camera\n my_children[1]: _nameless.front\n my_children[2]: _nameless.westplay.mirror\n"),
+            "{patched}"
+        );
+        let mirror = block("_nameless.westplay.mirror");
+        assert!(mirror.contains("<img src=/material/ui/westplay/screen_man_tgx_2020.mat"), "{mirror}");
+        assert_eq!(coords(&mirror), coords(&page));
+        assert_eq!(coords(&mirror), "coords_l: 0 coords_r: 956 coords_t: 540 coords_b: -8");
+        assert!(mirror.contains(" layer: 100\n"), "{mirror}");
+        assert!(mirror.trim_end().ends_with("my_parent: _nameless.mirror"), "{mirror}");
+        // The group inside the page doesn't take it as well: the page's one element, drawn with it.
+        assert!(!patched.contains("my_children[0]: _nameless.westplay.mirror"), "{patched}");
+        // No front mirror page, no screen: its place there is the game's map's, as the game has it.
+        for script in [SCRIPT, CAMERA_SCRIPT] {
+            let patched = patch_gps_script(script, "screen_generic", None, SCREEN_HEIGHT).unwrap();
+            assert!(!patched.contains("westplay.mirror"), "{patched}");
+        }
     }
 
     #[test]
@@ -2418,7 +2575,8 @@ mod tests {
     fn reads_ythq_tablets_own_screens_from_this_pcs_workshop() {
         let game = crate::game::find(crate::game::Kind::Ets2).into_iter().next().expect("the game installed");
         let workshop = game.workshop().expect("the game's Workshop folder");
-        let made = ythq_screen_files(Some(&workshop), game.kind);
+        let files = GameFiles::install(&game.dir).unwrap();
+        let made = ythq_screen_files(Some(&workshop), game.kind, &files);
         let by_path: std::collections::BTreeMap<&str, &Vec<u8>> =
             made.files.iter().map(|(path, bytes)| (path.as_str(), bytes)).collect();
         println!(
@@ -2434,6 +2592,16 @@ mod tests {
             made.problems
         );
         assert!(made.problems.is_empty(), "{:?}", made.problems);
+        // The game's own interiors files back over YTHQ's own of those paths: the game's screens, YTHQ's scripts no more.
+        println!(
+            "{} interiors kept as the game's: {:?}",
+            made.stock.len(),
+            made.stock.iter().map(|(path, _)| path).collect::<Vec<_>>()
+        );
+        assert!(!made.stock.is_empty());
+        for (path, text) in &made.stock {
+            assert!(!String::from_utf8_lossy(text).contains("/ui/dashboard/ythq"), "{path}");
+        }
         assert_eq!(
             made.screens,
             ythq_screens(game.kind).iter().map(|(path, _)| *path).collect::<Vec<_>>()
@@ -2518,7 +2686,8 @@ mod tests {
     fn reads_ats_ythq_tablets_screens_from_this_pcs_workshop() {
         let game = crate::game::find(crate::game::Kind::Ats).into_iter().next().expect("the game installed");
         let workshop = game.workshop().expect("the game's Workshop folder");
-        let made = ythq_screen_files(Some(&workshop), game.kind);
+        let files = GameFiles::install(&game.dir).unwrap();
+        let made = ythq_screen_files(Some(&workshop), game.kind, &files);
         println!(
             "{} screens: {:?}\n{} tablets: {:?}\n{} definitions read\n{} materials: {:?}\n{} models\nproblems: {:?}",
             made.screens.len(),
@@ -3011,7 +3180,7 @@ ui::text : _nameless._.map {
         }
         drop(archive);
         // As its archive has it now: current (the app needn't build it again).
-        assert!(ythq_screens_current(Kind::Ats, Some(workshop.as_path()), &out));
+        assert!(ythq_screens_current(Kind::Ats, Some(workshop.as_path()), &out, &game));
         let _ = std::fs::remove_dir_all(&workshop);
     }
 
@@ -3046,6 +3215,34 @@ ui::text : _nameless._.map {
         let placed = patch_ythq_tablet_script(&screen, "screen_tablet", Some(&YTHQ_TABLET_SHOWN)).unwrap();
         let tablet = placed.split(&marker).nth(1).unwrap();
         assert!(tablet.contains(" coords_l: 0\n coords_r: 256\n coords_t: 207\n coords_b: 49\n"), "{tablet}");
+    }
+
+    /// YTHQ Tablet's own interior screens files (`def/vehicle/<vehicle>/interior/computers*.sui`): the game's own back
+    /// at those paths, so its own truck's centre screen isn't its UI whether or not a tablet is fitted (owner
+    /// 2026-11-28: "就是ythq会把卡车原版的中控也变成他的，不要让ythq修改这个").
+    #[test]
+    fn ythq_tablets_interiors_screens_files_are_put_back_to_the_games() {
+        let stock = "SiiNunit\n{\n\tgps_path: \"/ui/dashboard/man_tgx_2020_gps.sii\"\n\tgps_drawable_size: (1024, 512)\n}\n";
+        let theirs =
+            "SiiNunit\n{\n\tgps_path: \"/ui/dashboard/ythq_tablet_gps_mirror_h_nfb.sii\"\n\tgps_drawable_size: (512, 512)\n}\n";
+        let path = "def/vehicle/truck/man.tgx_2020/interior/computers.sui";
+        let root = std::env::temp_dir().join(format!("westplay-stock-interiors-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("def/vehicle/truck/man.tgx_2020/interior")).unwrap();
+        std::fs::write(root.join(path), stock).unwrap();
+        let game = GameFiles::new(vec![westplay_mapdata::files::Mount::Folder(root.clone())]);
+        let files = [(path, theirs)];
+        let workshop = ythq_workshop("interiors", Kind::Ets2, &files);
+        let out = workshop.join("westplay.scs");
+        let (bytes, built) =
+            build(&game, &[], &cab_mark::Marks::default(), Kind::Ets2, Some(workshop.as_path())).unwrap();
+        std::fs::write(&out, &bytes).unwrap();
+        assert_eq!(built.ythq_stock, 1);
+        let archive = Archive::open(&out).unwrap();
+        let made = String::from_utf8(archive.read(path).unwrap().unwrap()).unwrap();
+        assert_eq!(made, stock, "the game's own, not YTHQ's");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&workshop);
     }
 
     #[test]
@@ -3151,7 +3348,7 @@ ui::text : _nameless._.map {
         );
         drop(archive);
         // As its archive has them now: current. Updated: not, and made again current.
-        assert!(ythq_screens_current(Kind::Ets2, Some(&workshop), &out));
+        assert!(ythq_screens_current(Kind::Ets2, Some(&workshop), &out, &game));
         let changed = YTHQ_SCRIPT.replace("bare_map.mat", "bare_map2.mat");
         let updated: Vec<(&str, String)> = files
             .iter()
@@ -3161,9 +3358,9 @@ ui::text : _nameless._.map {
         let files: Vec<(String, Vec<u8>)> =
             workshop_files.iter().map(|(path, text)| ((*path).to_owned(), text.as_bytes().to_vec())).collect();
         std::fs::write(workshop.join(ythq_item(Kind::Ets2)).join("universal.scs"), zip(&files)).unwrap();
-        assert!(!ythq_screens_current(Kind::Ets2, Some(&workshop), &out));
+        assert!(!ythq_screens_current(Kind::Ets2, Some(&workshop), &out, &game));
         make();
-        assert!(ythq_screens_current(Kind::Ets2, Some(&workshop), &out));
+        assert!(ythq_screens_current(Kind::Ets2, Some(&workshop), &out, &game));
         let _ = std::fs::remove_dir_all(&workshop);
     }
 
@@ -3286,7 +3483,7 @@ ui::text : _nameless._.map {
         assert!(script.contains("screen_tablet.mat"), "{script}");
         drop(archive);
         // Its tablet's copy in the mod: current.
-        assert!(ythq_screens_current(Kind::Ets2, Some(&workshop), &out));
+        assert!(ythq_screens_current(Kind::Ets2, Some(&workshop), &out, &game));
         let _ = std::fs::remove_dir_all(&workshop);
     }
 
@@ -3385,7 +3582,7 @@ ui::text : _nameless._.map {
             String::from_utf8(archive.read("ui/dashboard/ythq_tablet_gps_mirror_nfb.sii").unwrap().unwrap()).unwrap();
         assert!(script.contains("screen_tablet.mat"), "{script}");
         drop(archive);
-        assert!(ythq_screens_current(Kind::Ets2, None, &out));
+        assert!(ythq_screens_current(Kind::Ets2, None, &out, &game));
         let _ = std::fs::remove_file(&out);
     }
 

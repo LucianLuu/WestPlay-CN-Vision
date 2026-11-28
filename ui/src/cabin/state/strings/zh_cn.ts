@@ -487,6 +487,7 @@ export const strings: Strings = {
     displayPerformance: '显示与性能',
     hz30: '30 Hz',
     hz60: '60 Hz',
+    hzDisplay: '显示器',
     maps: '地图',
     refreshRate: '屏幕刷新率',
     refreshRateFooter: '修改屏幕显示的刷新率',
