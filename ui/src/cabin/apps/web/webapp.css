@@ -128,6 +128,16 @@
   color: var(--text-dim);
 }
 
+/* Douyin's page, whole: the cabin's bar is gone (its own header, search and sign-in are the page's), and the
+   page fills the app's area from its top to its bottom — the sidebar still floats over the left of the screen. */
+.webapp.bare .webapp-page {
+  border-radius: 0;
+}
+
+.webapp.bare .webapp-preview {
+  inset: 0;
+}
+
 /* A video of the page's gone full screen (the page says so, the host passes it on): this app takes the whole
    CarPlay area, its bar out of the way, and the page cuts the cabin page open all over it — the way YouTube's own
    player does (youtube.css `.yt-player`). The truck's OEM strip and the sidebar are where they were. */

@@ -28,7 +28,9 @@ export const SITE_NAMES: Record<WebAppSite, string> = {
 /**
  * A streaming site, the site itself: its own page, whole, in a WebView of the host's under this one
  * (westplay_host::webapp), where this app cuts the cabin page open. The bar above is the cabin page's own: the
- * page's `<title>` (the song or video playing), its history back, its home page and a reload.
+ * page's `<title>` (the song or video playing), its history back, its home page and a reload. Douyin has none of
+ * it (`bare`): its own page is the whole app, as its site is a place of its own with a header, a search and a
+ * sign-in of its own.
  *
  * The page isn't part of this page, so the host sends it the mouse where it points at it (crates/host/src/
  * pointer.rs), and the player's own keyboard types into its fields (webapp.js). In a plain browser there is no
@@ -48,6 +50,9 @@ export function WebApp({ site }: { site: WebAppSite }) {
   // A solid background over the site while its page loads the first time (webapp.ts).
   const covering = useWebAppCover(site)
   const shown = isInHost()
+  // Douyin's own page is the app: no bar of the cabin's over it (its own header, search and sign-in are the
+  // page's), and the page fills the app's area the way the cabin's own players do (owner 2026-11-28).
+  const bare = site === 'douyin'
 
   // Its page, opened as the app opens (the host says whether it's a site it already has running).
   useEffect(() => {
@@ -153,42 +158,44 @@ export function WebApp({ site }: { site: WebAppSite }) {
 
   return (
     <section
-      className={`app-panel webapp${fullScreen ? ' full-screen' : ''}`}
+      className={`app-panel webapp${bare ? ' bare' : ''}${fullScreen ? ' full-screen' : ''}`}
       aria-label={text.apps[APP_OF_SITE[site]]}
     >
-      <header className="webapp-bar">
-        <button
-          type="button"
-          className="webapp-button"
-          onClick={() => command({ action: 'back' })}
-          disabled={!canGoBack}
-          aria-label={text.webApp.back}
-        >
-          <BackGlyph />
-        </button>
-        <div className="webapp-now">
-          <div className="webapp-site">{SITE_NAMES[site]}</div>
-          <div className="webapp-title" title={title}>
-            {title || (shown && (running === site ? text.webApp.loading : text.webApp.opening))}
+      {!bare && (
+        <header className="webapp-bar">
+          <button
+            type="button"
+            className="webapp-button"
+            onClick={() => command({ action: 'back' })}
+            disabled={!canGoBack}
+            aria-label={text.webApp.back}
+          >
+            <BackGlyph />
+          </button>
+          <div className="webapp-now">
+            <div className="webapp-site">{SITE_NAMES[site]}</div>
+            <div className="webapp-title" title={title}>
+              {title || (shown && (running === site ? text.webApp.loading : text.webApp.opening))}
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          className="webapp-button"
-          onClick={() => command({ action: 'home' })}
-          aria-label={text.webApp.home}
-        >
-          <HomeGlyph />
-        </button>
-        <button
-          type="button"
-          className="webapp-button"
-          onClick={() => command({ action: 'reload' })}
-          aria-label={text.webApp.reload}
-        >
-          <ReloadGlyph />
-        </button>
-      </header>
+          <button
+            type="button"
+            className="webapp-button"
+            onClick={() => command({ action: 'home' })}
+            aria-label={text.webApp.home}
+          >
+            <HomeGlyph />
+          </button>
+          <button
+            type="button"
+            className="webapp-button"
+            onClick={() => command({ action: 'reload' })}
+            aria-label={text.webApp.reload}
+          >
+            <ReloadGlyph />
+          </button>
+        </header>
+      )}
       {/* The page shows through here (the host's WebView, under this one): nothing of this page is in it,
           but the cover while its page loads (`useWebAppCover`). */}
       <div ref={page} className="webapp-page" aria-hidden>
