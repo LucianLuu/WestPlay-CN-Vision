@@ -204,6 +204,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, page: str, status: int = 200) -> None:
+        body = page.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _fail(self, error: Exception, status: int = 502) -> None:
         code = getattr(error, "code", None)
         self._send({"error": str(error), "code": code}, status)
@@ -356,6 +365,10 @@ class Handler(BaseHTTPRequestHandler):
             # KuGou Music, in this same layer (`kugou.py`): the app's own routes, the same shapes.
             if path == "/kugou/health":
                 return self._send({"ok": True, **kugou.account_public()})
+            # The sign-in window's own page (`kugou.py`'s `LOGIN_PAGE`): the QR, and the phone's scan. WestPlay's
+            # window on the PC's desktop shows it, so signing in needs the cab's app no more (owner 2026-11-28).
+            if path == "/kugou/login":
+                return self._send_html(kugou.LOGIN_PAGE)
             if path == "/kugou/qr":
                 return self._send(kugou.qr_start())
             if path == "/kugou/qr/check":

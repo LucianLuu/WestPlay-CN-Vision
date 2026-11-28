@@ -124,6 +124,20 @@ pub const APPLE_MUSIC: Site = Site {
     cookie_origins: &[],
     signing_out: false,
 };
+/// KuGou Music's sign-in: the QR its own layer serves (`netease_layer`, `/kugou/login`), in a window of
+/// WestPlay's on the PC's desktop — the phone scans it there, nothing of the account passing through WestPlay. The
+/// layer's port isn't known until it runs, so the address is filled in as the window opens
+/// ([`SignInWindow::open_at`]); the page itself says `{"signedIn":true}` once the scan signed the layer in.
+pub const KUGOU: Site = Site {
+    sign_in: "http://127.0.0.1:8788/kugou/login",
+    title: "Sign in to KuGou Music - WestPlay",
+    home: "http://127.0.0.1:8788/kugou/login",
+    not_yet: None,
+    // A site whose page says it's signed in: what earns the message handler. The page does the telling itself.
+    page_says: Some("/* The page itself says when it is signed in. */"),
+    cookie_origins: &[],
+    signing_out: false,
+};
 const CLASS: windows::core::PCWSTR = w!("WestPlaySignIn");
 const SIZE: (i32, i32) = (520, 760);
 /// Windows' message for the mouse leaving a window that asked to be told (its value, from WinUser.h).
@@ -178,6 +192,16 @@ impl SignInWindow {
     /// Opens `site`'s sign-in in a window on the desktop, in front, in `environment` (that of the service's page
     /// in WestPlay: its profile, so the sign-in is its).
     pub fn open(environment: &ICoreWebView2Environment, site: &'static Site) -> Result<Self, webview::Error> {
+        Self::open_at(environment, site, site.sign_in)
+    }
+
+    /// Opens `site`'s window on `address` rather than its own sign-in page: a service whose way in is a page
+    /// WestPlay's own layer serves (KuGou Music's QR), whose port is known only once the layer runs.
+    pub fn open_at(
+        environment: &ICoreWebView2Environment,
+        site: &'static Site,
+        address: &str,
+    ) -> Result<Self, webview::Error> {
         // SAFETY: no name: this process's own module, loaded as long as it runs.
         let instance = unsafe { GetModuleHandleW(None)? };
         let class = WNDCLASSW {
@@ -216,7 +240,7 @@ impl SignInWindow {
                 None,
             )?
         };
-        match Self::host(environment, window, site) {
+        match Self::host(environment, window, site, address) {
             Ok(this) => Ok(this),
             Err(e) => {
                 // SAFETY: `window` was created above, on this thread, and nothing else holds it.
@@ -228,8 +252,13 @@ impl SignInWindow {
         }
     }
 
-    /// The WebView in `window`: drawn into its visual tree, on the service's sign-in.
-    fn host(environment: &ICoreWebView2Environment, window: HWND, site: &'static Site) -> Result<Self, webview::Error> {
+    /// The WebView in `window`: drawn into its visual tree, on the service's sign-in (or on `address`).
+    fn host(
+        environment: &ICoreWebView2Environment,
+        window: HWND,
+        site: &'static Site,
+        address: &str,
+    ) -> Result<Self, webview::Error> {
         // The window's own visual tree (the thread has the DispatcherQueue composition needs: the Stage's).
         let compositor = Compositor::new()?;
         let target =
@@ -368,7 +397,7 @@ impl SignInWindow {
         unsafe {
             fit(window, &this.hosted);
             this.hosted.controller.SetIsVisible(true)?;
-            this.webview.Navigate(&HSTRING::from(site.sign_in))?;
+            this.webview.Navigate(&HSTRING::from(address))?;
             let _ = ShowWindow(window, SW_SHOW);
         }
         this.bring_forward();

@@ -18,10 +18,10 @@
      用户截图二圈出来的那个。兜底成「跳过」（signedIn 时仍用词条里的「继续」）。
   3. 账号页第一行 `Bilibili` → `哔哩哔哩`。
   4. 引导步里 row 名硬编码的 `YouTube` → `哔哩哔哩`。
-  5. 账号页补上两行（owner 2026-11-28 那天接着说）：`酷狗音乐`（`kugou_*`，登录是在
-     车机屏幕上开酷狗自己的扫码）和 `Apple Music`（`apple_music_*`，宿主本来就有这几个命令，
-     3.0 的账号页去掉过）。它们的登录态：酷狗来自宿主状态里的 `kugouSignedIn`（层的
-     `/kugou/health`），Apple Music 还是 `appleMusicSignedIn`。
+  5. 账号页补上两行（owner 2026-11-28 那天接着说）：`酷狗音乐`（`kugou_*`，登录是宿主在 PC 上
+     弹一个独立窗口，里面是层自己出的二维码 `/kugou/login`）和 `Apple Music`（`apple_music_*`，
+     宿主本来就有这几个命令，3.0 的账号页去掉过）。它们的登录态：酷狗来自宿主状态里的
+     `kugouSignedIn`（层的 `/kugou/health`），Apple Music 还是 `appleMusicSignedIn`。
 
   用法：
     pwsh -File tools/scripts/patch-companion-onboarding.ps1                    # 改仓库 ui/dist

@@ -601,6 +601,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // window, and comes back once the window is done — the app sent its Start once and won't again
     // (owner 2026-11-28).
     let mut qq_music_back_after_sign_out = false;
+    // KuGou Music's sign-in window (`signin::KUGOU`): its QR, served by its own layer, in a window on the PC's
+    // desktop — the phone scans it there, so the cab has no part in it (owner 2026-11-28).
+    let mut kugou_sign_in: Option<signin::SignInWindow> = None;
     // NetEase Cloud Music's layer (`netease_layer`): the app starts it, and the host finds the port it
     // came up on. The page asks this host for it, then talks to the layer itself over the loopback.
     let netease = netease_music::Netease::new();
@@ -759,14 +762,31 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 AccountAction::Check => apple_music::Command::Start,
             });
         }
-        // KuGou Music's account: the cab's own app signs in by a QR (`ui/src/cabin/apps/kugou`), so the
-        // companion's accounts page asks for it and the page brings that app up over the screen with its QR
-        // (`{"type":"kugou","action":"signIn"}`). Signing out is the layer's own route, and asking is what the
-        // status already does every pass (`/kugou/health`).
+        // KuGou Music's account: its own layer's (`/kugou/health`). Signing in is the QR its layer serves
+        // (`/kugou/login`), in a window of WestPlay's on the PC's desktop — the phone scans it there, and the
+        // window closes itself once the layer is signed in; signing out is the layer's own route, and asking is
+        // what the status already does every pass.
         if let Some(action) = config.accounts.kugou.take() {
             match action {
                 AccountAction::SignIn => {
-                    let _ = webview.post_json(r#"{"type":"kugou","action":"signIn"}"#);
+                    if let Some(port) = netease_layer::PORTS
+                        .iter()
+                        .copied()
+                        .find(|&port| netease_layer::health(port).is_some())
+                    {
+                        let address = format!("http://127.0.0.1:{port}/kugou/login");
+                        let opened = crate::webview::environment_for(&config.data_dir.join("webview2-kugou"))
+                            .and_then(|environment| signin::SignInWindow::open_at(&environment, &signin::KUGOU, &address));
+                        match opened {
+                            Ok(window) => {
+                                log!("[kugou] sign-in window open at {address}");
+                                kugou_sign_in = Some(window);
+                            }
+                            Err(error) => log!("[kugou] sign-in window didn't open: {error:?}"),
+                        }
+                    } else {
+                        log!("[kugou] sign-in: its layer isn't running");
+                    }
                 }
                 AccountAction::SignOut => {
                     if let Some(port) = netease_layer::PORTS
@@ -780,6 +800,15 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 }
                 AccountAction::Check => {}
             }
+        }
+        // KuGou Music's window: the page says it's signed in once the phone's scan did (the layer's own
+        // `/kugou/health` is what the status reads), and it's closed then — or a player closed it, and that's
+        // that (the account stays as it was).
+        if let Some(progress) = kugou_sign_in.as_ref().map(signin::SignInWindow::progress)
+            && progress != signin::Progress::Signing
+        {
+            log!("[kugou] sign-in window done: {progress:?}");
+            kugou_sign_in = None;
         }
         // The companion's Bilibili, NetEase Cloud Music and QQ Music sign-ins: their own pages in a window on the
         // desktop, on the profiles the apps in the cab show them on (weblogin.rs).

@@ -823,3 +823,76 @@ def favourites(page: int = 1, pagesize: int = 30) -> dict:
     playlists = [_favourite(each) for each in rows if isinstance(each, dict)]
     return {"playlists": [each for each in playlists if each["id"]], "more": len(playlists) >= pagesize}
 
+
+# The sign-in window's page (`crates/host/src/signin.rs`, `Site::KUGOU`): the QR, and the phone that scans it.
+# WestPlay opens it in a window of its own on the PC's desktop (`/kugou/login`), so signing in needs the cab's
+# app no more; the page tells the window `{"signedIn": true}` once the layer is signed in (`/kugou/qr/check`
+# status 4), and the window closes itself.
+LOGIN_PAGE = """<!doctype html>
+<meta charset="utf-8">
+<title>登录酷狗音乐</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+         box-sizing: border-box; padding: 24px; font: 15px/1.7 "Microsoft YaHei", "PingFang SC", sans-serif;
+         color: #f2f2f2; background: #141414; text-align: center; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  #code { width: 220px; height: 220px; border-radius: 12px; background: #fff; display: flex;
+          align-items: center; justify-content: center; color: #666; font-size: 13px; }
+  #code img { width: 100%; height: 100%; border-radius: 12px; }
+  #state { margin: 0; opacity: .72; min-height: 1.7em; }
+  #again { display: none; border: 0; border-radius: 9px; padding: 9px 18px; font: inherit;
+           background: #fff; color: #141414; cursor: pointer; }
+  #again:hover { background: #e6e6e6; }
+</style>
+<h1>登录酷狗音乐</h1>
+<div id="code">正在取二维码…</div>
+<p id="state"></p>
+<button id="again">二维码过期，重新加载</button>
+<script>
+  const code = document.getElementById('code')
+  const state = document.getElementById('state')
+  const again = document.getElementById('again')
+  let key = ''
+  let busy = false
+  const tell = (message) => { try { window.chrome.webview.postMessage(message) } catch (e) {} }
+  async function deal() {
+    busy = true
+    again.style.display = 'none'
+    state.textContent = '正在取二维码…'
+    code.textContent = '正在取二维码…'
+    try {
+      const answer = await (await fetch('/kugou/qr')).json()
+      key = answer.key
+      code.innerHTML = '<img alt="酷狗音乐登录二维码" src="' + answer.image + '">'
+      state.textContent = '打开酷狗音乐的“扫一扫”，扫这个二维码登录'
+      busy = false
+      setTimeout(tick, 900)
+    } catch (e) {
+      code.textContent = '二维码取不到'
+      state.textContent = '连不上酷狗音乐的服务，点下面重新加载'
+      again.style.display = 'inline-block'
+    }
+  }
+  async function tick() {
+    if (!key || busy) return
+    try {
+      const answer = await (await fetch('/kugou/qr/check?key=' + encodeURIComponent(key))).json()
+      if (answer.status === 4) {
+        state.textContent = '已登录，这个窗口马上关掉'
+        tell({ signedIn: true })
+        return
+      }
+      if (answer.status === 0) {
+        state.textContent = '二维码过期了，点下面重新加载'
+        again.style.display = 'inline-block'
+        return
+      }
+      if (answer.status === 2) state.textContent = '已扫码，请在手机上点“确认登录”'
+    } catch (e) {}
+    setTimeout(tick, 1200)
+  }
+  again.addEventListener('click', deal)
+  deal()
+</script>
+"""

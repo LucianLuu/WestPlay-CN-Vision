@@ -1993,20 +1993,53 @@
     else tellPlayback()
   }
 
+  // A shuffled round: the songs' numbers in the order it deals them, where in it the player is, the
+  // ones it has played (by mid: a queue changed under it is still known), and the queue that order
+  // was dealt for (a song added or taken out deals it again).
+  let order = []
+  let orderAt = 0
+  let played = new Set()
+  let orderOf = ''
+
+  const dealt = (list) => {
+    const out = [...list]
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[out[i], out[j]] = [out[j], out[i]]
+    }
+    return out
+  }
+
+  // Dealt again: what this round hasn't played first, what it played last at its end, so a song
+  // just heard doesn't come round again at once.
+  const deal = () => {
+    const rest = []
+    const past = []
+    for (let i = 0; i < player.queue.length; i++) {
+      if (i === player.index) continue
+      ;(played.has(player.queue[i]) ? past : rest).push(i)
+    }
+    order = [...dealt(rest), ...dealt(past)]
+    orderAt = 0
+    orderOf = player.queue.join('|')
+  }
+
   function step(dir) {
     if (player.queue.length === 0) return
     let next
     if (player.shuffle) {
-      next =
-        player.queue.length === 1
-          ? player.index
-          : (() => {
-              let pick
-              do {
-                pick = Math.floor(Math.random() * player.queue.length)
-              } while (pick === player.index)
-              return pick
-            })()
+      if (player.queue.length === 1) {
+        next = player.index
+      } else {
+        if (orderOf !== player.queue.join('|')) deal()
+        while (orderAt < order.length && order[orderAt] === player.index) orderAt++
+        if (orderAt >= order.length) {
+          played = new Set(order.slice(-8).map((i) => player.queue[i]))
+          deal()
+        }
+        next = order[orderAt++]
+        played.add(player.queue[next])
+      }
     } else {
       next = player.index + dir
       if (next >= player.queue.length) next = player.repeat === 'all' ? 0 : -1
