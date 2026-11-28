@@ -763,6 +763,15 @@ impl QqMusic {
         write_session(user_data, cookies);
     }
 
+    /// Whether a session is on disk: the account this player would open with. The file is written
+    /// when the account signs in and deleted when it signs out (`forget`), so its presence is the
+    /// answer for a player that isn't running at all (owner 2026-11-28: the accounts page said
+    /// "未登录" for an account signed in all along, simply because QQ Music hadn't been opened yet
+    /// this run and only its own page could tell).
+    pub fn recalls_session(user_data: &Path) -> bool {
+        read_session(user_data).is_some()
+    }
+
     /// Stage a persisted cookie to be handed to the hidden page once it reports ready (a message sent
     /// before the startup script binds its listener would otherwise be dropped).
     pub fn restore_session(&self, cookies: String) {

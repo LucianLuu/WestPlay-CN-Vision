@@ -952,10 +952,25 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     now.bilibili.signed_in = Some(signed_in);
                 }
             }
-            // QQ Music's page, through its own client: it reports as the page loads.
-            if let Some(player) = &qq_music {
-                if let Some(signed_in) = player.signed_in() {
-                    now.qq_music.signed_in = Some(signed_in);
+            // QQ Music's page, through its own client: it reports as the page loads. Not running
+            // at all (the app hasn't opened it this run), its session on disk is the account it
+            // would open with — kept when the account signed in, deleted when it signed out — so
+            // that the accounts page doesn't say "未登录" for an account signed in all along
+            // (owner 2026-11-28).
+            match &qq_music {
+                Some(player) => {
+                    if let Some(signed_in) = player.signed_in() {
+                        now.qq_music.signed_in = Some(signed_in);
+                    }
+                }
+                None => {
+                    if now.qq_music.signed_in.is_none()
+                        && qq_music::QqMusic::recalls_session(
+                            &config.data_dir.join("webview2-qq-music"),
+                        )
+                    {
+                        now.qq_music.signed_in = Some(true);
+                    }
                 }
             }
             // NetEase's layer, which answers `/api/health` with it.
