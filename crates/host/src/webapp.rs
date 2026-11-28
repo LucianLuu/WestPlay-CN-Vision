@@ -123,6 +123,16 @@ impl Site {
             Site::Kugou => "kugou",
         }
     }
+
+    /// The zoom its page is opened at: its own size, save for a site whose pages are laid out for a desktop
+    /// and read too small in the cab — Douyin's, whose video grid and words were hard to read at arm's length
+    /// (owner 2026-11-28). The player's own zoom starts here and goes on from the wheel (`WebApp::zoom_by`).
+    pub fn opening_zoom(self) -> f64 {
+        match self {
+            Site::Douyin => 1.35,
+            Site::Bilibili | Site::QqMusic | Site::Netease | Site::Kugou => 1.0,
+        }
+    }
 }
 
 /// What the cabin page asks of the web app (a `webApp` page message).
@@ -399,7 +409,10 @@ impl WebApp {
         // The truck speakers' sound first: the page's script makes its own of it (cab_sound.js).
         view.add_startup_script(concat!(include_str!("cab_sound.js"), "\n", include_str!("webapp.js")))?;
         view.navigate(site.home())?;
-        Ok(Self {
+        // Its page's zoom from the first draw: a site that reads too small at its own size opens larger (the
+        // player's own zoom, so the wheel goes on from there and a page change keeps it — `Site::opening_zoom`).
+        let opening = site.opening_zoom();
+        let app = Self {
             site,
             view,
             frame: stage.page_size(),
@@ -413,17 +426,19 @@ impl WebApp {
             placed: Cell::new(None),
             zoom: Cell::new(1.0),
             fit: Cell::new(1.0),
-            wanted_player_zoom: Cell::new(1.0),
-            player_zoom: Cell::new(1.0),
+            wanted_player_zoom: Cell::new(opening),
+            player_zoom: Cell::new(opening),
             settled_at: Cell::new(Instant::now()),
-            zoom_logged: Cell::new(1.0),
+            zoom_logged: Cell::new(opening),
             wanted: Cell::new(false),
             fitted: Cell::new(true),
             waiting: Cell::new(None),
             full_screen: Cell::new(false),
             last_shown: Cell::new(false),
             told: RefCell::default(),
-        })
+        };
+        app.apply_zoom();
+        Ok(app)
     }
 
     /// Its page's WebView2 environment: its profile's (a sign-in window on it is the page's own account,
@@ -929,6 +944,16 @@ pub fn typing_message(on: bool, text: &str, selection: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_pages_that_read_too_small_open_larger() {
+        // Douyin's pages are laid out for a desktop and read too small in the cab: it opens larger (owner
+        // 2026-11-28). The other sites open at their own size.
+        assert!(Site::Douyin.opening_zoom() > 1.0);
+        for site in [Site::Bilibili, Site::QqMusic, Site::Netease, Site::Kugou] {
+            assert_eq!(site.opening_zoom(), 1.0);
+        }
+    }
 
     #[test]
     fn the_wheel_zooms_the_page_steplessly_by_its_own_counts() {
