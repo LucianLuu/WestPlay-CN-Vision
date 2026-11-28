@@ -883,8 +883,11 @@ if let Some(media) = said.as_ref().and_then(|said| said.get("media")) {
             return;
         }
         // The player's own zoom, larger: theirs, and the fit doesn't narrow it back (a page laid out wider
-        // than the room then, as page zoom leaves it, and one they can narrow again with the wheel).
-        if self.player_zoom.get() > 1.0 {
+        // than the room then, as page zoom leaves it, and one they can narrow again with the wheel). Larger
+        // than what the site opens at (`Site::opening_zoom`) — a site's own opening zoom is not theirs, so a
+        // page that spills over at it is fitted back in rather than cut off at the right (Douyin's, owner
+        // 2026-11-28).
+        if self.player_zoom.get() > self.site.opening_zoom() + 0.005 {
             return;
         }
         let ratio = seen / needed;

@@ -129,11 +129,9 @@
 }
 
 /* Douyin's page, whole: the cabin's bar is gone (its own header, search and sign-in are the page's), and the
-   page fills the app's area from its top to its bottom — the sidebar still floats over the left of the screen. */
-.webapp.bare .webapp-page {
-  border-radius: 0;
-}
-
+   page fills the app's area from its top to its bottom — the sidebar still floats over the left of the screen.
+   Its corners are rounded as every other app's are (`.webapp-page`'s own radius, cut through the cab's mask
+   with the corner's zoom): the page is a window of the cabin's, not the screen itself. */
 .webapp.bare .webapp-preview {
   inset: 0;
 }
