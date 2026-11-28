@@ -827,10 +827,11 @@ export const useKuGou = create<KuGouState>((set, get) => ({
     const song = tracks[index]
     if (song) set({ recent: noteRecent(song) })
     void start(index)
-    // The words page open: the song it was showing is gone, and the new one's words are asked for here —
-    // switching songs never went through `setWords`, so the page kept the old `wordsFor` and read as a song
-    // without words (owner 2026-11-28: 切歌后歌词加载不出来).
-    if (song && get().wordsOpen) void get().loadWords(song)
+    // The words page open (`nowOpen`: Now Playing is where its words show — `wordsOpen` is set nowhere yet):
+    // the song it was showing is gone, and the new one's words are asked for here, since switching songs never
+    // went through `setNow`, and the page kept the old `wordsFor` and read as a song without words
+    // (owner 2026-11-28: 切歌后歌词加载不出来).
+    if (song && get().nowOpen) void get().loadWords(song)
   },
   toggle() {
     const playback = get().playback
@@ -857,7 +858,7 @@ export const useKuGou = create<KuGouState>((set, get) => ({
     if (song) set({ recent: noteRecent(song) })
     void start(next)
     // The words page open: its words are the next song's (see `play`).
-    if (song && get().wordsOpen) void get().loadWords(song)
+    if (song && get().nowOpen) void get().loadWords(song)
   },
   previousSong() {
     const playback = get().playback
@@ -871,7 +872,7 @@ export const useKuGou = create<KuGouState>((set, get) => ({
     void start(before)
     // The words page open: its words are the one before this (see `play`).
     const song = playback.tracks[before]
-    if (song && get().wordsOpen) void get().loadWords(song)
+    if (song && get().nowOpen) void get().loadWords(song)
   },
   seek(seconds) {
     if (!Number.isFinite(audio.duration)) return
