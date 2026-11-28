@@ -3,8 +3,9 @@ import { isInHost, type WebAppSite } from '../../../shared/host'
 import { keyboardLanguage } from '../../keyboard/layouts'
 import { useKeyboard } from '../../keyboard/store'
 import { whenTransitionEnds } from '../../state/launch'
-import { useCabin } from '../../state/store'
+import { useCabin, useLive } from '../../state/store'
 import { useLanguage, useText } from '../../state/text'
+import { reversing } from '../../reverse/reverse'
 import { followArea } from '../youtube/youtube'
 import { APP_OF_SITE, command, floatingTop, useWebApp, useWebAppCover, webAppField } from './webapp'
 import './webapp.css'
@@ -98,6 +99,15 @@ export function WebApp({ site }: { site: WebAppSite }) {
     let gone = false
     const place = () => {
       if (gone) return
+      // The truck in reverse: the cab screen is the camera's (reverse/ReverseCamera.tsx), and this site's page
+      // isn't part of this page — the host paints it over the cabin, where it is placed — so it would sit over
+      // the camera whole (owner 2026-11-28: Douyin covered the reversing picture). No page while it is, and the
+      // hole stays as it is (nothing of this page is there to be seen through it; in the `live` layout it is the
+      // game's own picture that shows through it). The page runs on meanwhile, its sound too.
+      if (reversing(useLive.getState())) {
+        command({ action: 'hide' })
+        return
+      }
       const area = document.querySelector('.carplay')?.getBoundingClientRect()
       const box = element.getBoundingClientRect()
       if (!area || box.width === 0 || element.offsetWidth === 0) return
@@ -126,6 +136,11 @@ export function WebApp({ site }: { site: WebAppSite }) {
         height: Math.round(height * scale),
       })
     }
+    // The truck going into reverse, or leaving it: the page goes (or comes back) as the camera takes (or gives
+    // back) the screen.
+    const stopReverse = useLive.subscribe((live, before) => {
+      if (reversing(live) !== reversing(before)) place()
+    })
     // The window grows in from its icon (a transform, which no size change tells of): placed again as it
     // settles, and once the screen change is over.
     const follow = () => {
@@ -145,6 +160,7 @@ export function WebApp({ site }: { site: WebAppSite }) {
       gone = true
       stopped?.disconnect()
       stopKeys()
+      stopReverse()
       settling.forEach(clearTimeout)
       following?.()
       // The page goes first, its hole a moment after: the host takes a moment to take the WebView off, and
