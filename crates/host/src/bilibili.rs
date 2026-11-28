@@ -1322,25 +1322,25 @@ impl Bilibili {
         // The head first: the speakers' loudness is set from where it is as they're placed.
         if cab.1 != Some(head) && head.is_sound() {
             cab.1 = Some(head);
-            self.pass_script(&Command::Head { head })?;
+            self.pass_now(&Command::Head { head })?;
         }
         if cab.0.as_ref().map(Option::as_deref) != Some(speakers) {
             let speakers = speakers.map(<[_]>::to_vec);
             cab.0 = Some(speakers.clone());
-            self.pass_script(&Command::Speakers { speakers })?;
+            self.pass_now(&Command::Speakers { speakers })?;
         }
         let camera = (outside, if outside { (distance * 4.0).round() / 4.0 } else { 0.0 });
         if cab.2 != Some(camera) {
             cab.2 = Some(camera);
-            self.pass_script(&Command::Outside { on: camera.0, distance: camera.1 })?;
+            self.pass_now(&Command::Outside { on: camera.0, distance: camera.1 })?;
         }
         if cab.3 != Some(equalizer) {
             cab.3 = Some(equalizer);
-            self.pass_script(&Command::Equalizer { equalizer })?;
+            self.pass_now(&Command::Equalizer { equalizer })?;
         }
         if cab.4 != Some(spectrum) {
             cab.4 = Some(spectrum);
-            self.pass_script(&Command::Spectrum { on: spectrum })?;
+            self.pass_now(&Command::Spectrum { on: spectrum })?;
         }
         Ok(())
     }
@@ -1381,6 +1381,24 @@ impl Bilibili {
         match self.outbox.borrow_mut().send(command) {
             Some(message) => self.view.post_json(&message),
             None => Ok(()),
+        }
+    }
+
+    /// Passes a sound setting on to the page **now** (run in its current document, which this page's own app
+    /// swaps as it navigates), and keeps it in the outbox, so the next document is told it again when it says
+    /// it's there.
+    ///
+    /// The keeping is what `cab()` was missing: it ran these in the page directly and kept them nowhere, and
+    /// `cab()` sends the speakers the moment it knows them — usually before the page's startup script has run,
+    /// when `window.westplayRun` is still undefined. That command went nowhere, `cab()` had it down as told, and
+    /// the graph `cab_sound.js` builds never heard of a cab: the video played as flat stereo until the Spatial
+    /// Audio switch was turned off and on again, which changed the speakers and sent them anew (owner 2026-11-28:
+    /// "B站不会默认走空间音频，得手动关开一下").
+    fn pass_now(&self, command: &Command) -> windows::core::Result<()> {
+        match self.outbox.borrow_mut().send(command) {
+            // Not there yet: held, and replayed (with the rest of the cache) when the page says it is.
+            None => Ok(()),
+            Some(message) => self.run_in_page(&message),
         }
     }
 
