@@ -827,6 +827,10 @@ export const useKuGou = create<KuGouState>((set, get) => ({
     const song = tracks[index]
     if (song) set({ recent: noteRecent(song) })
     void start(index)
+    // The words page open: the song it was showing is gone, and the new one's words are asked for here —
+    // switching songs never went through `setWords`, so the page kept the old `wordsFor` and read as a song
+    // without words (owner 2026-11-28: 切歌后歌词加载不出来).
+    if (song && get().wordsOpen) void get().loadWords(song)
   },
   toggle() {
     const playback = get().playback
@@ -852,6 +856,8 @@ export const useKuGou = create<KuGouState>((set, get) => ({
     set({ playback: { ...playback, index: next, playing: true } })
     if (song) set({ recent: noteRecent(song) })
     void start(next)
+    // The words page open: its words are the next song's (see `play`).
+    if (song && get().wordsOpen) void get().loadWords(song)
   },
   previousSong() {
     const playback = get().playback
@@ -863,6 +869,9 @@ export const useKuGou = create<KuGouState>((set, get) => ({
     const before = Math.max(0, playback.index - 1)
     set({ playback: { ...playback, index: before, playing: true } })
     void start(before)
+    // The words page open: its words are the one before this (see `play`).
+    const song = playback.tracks[before]
+    if (song && get().wordsOpen) void get().loadWords(song)
   },
   seek(seconds) {
     if (!Number.isFinite(audio.duration)) return
