@@ -1,0 +1,20 @@
+{
+  "bundle": {
+    "resources": {
+      "../ui/dist/": "ui/",
+      "../assets/westplay.scs": "westplay.scs",
+      "../netease-layer/": "netease-layer/",
+      "dist-plugin/westplay.dll": "westplay.dll",
+      "dist-plugin/westplay-probe.exe": "westplay-probe.exe",
+      "dist-plugin/westplay-maps.exe": "westplay-maps.exe",
+      "../LICENSE": "LICENSE.txt",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../THIRD_PARTY_LICENSES.md": "THIRD_PARTY_LICENSES.md",
+      "../crates/host/src/radio_hls.LICENSE": "licenses/hls.js.LICENSE"
+    }
+  },
+  "build": {
+    "frontendDist": "../ui/dist",
+    "beforeBuildCommand": null
+  }
+}
