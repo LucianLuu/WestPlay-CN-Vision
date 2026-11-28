@@ -29,12 +29,17 @@ export const webappPlayer: MusicPlayer = {
   // What the site has counts, playing or paused: the keybinds' play/pause is the site's own toggle, so a site
   // whose song is paused is still the one a press should start again — told apart from "nothing here" only by
   // whether it has a song at all (owner 2026-11-01: paused, the keybinds went to the cab's music instead).
+  //
+  // A start is what the "one at a time" rule hears (`oneAtATime`), so it's told of the playing going on too —
+  // not only of a song appearing: Douyin's page has one song after another (a song there all along), and by
+  // presence alone its playing never told the other players to pause, which played on under its video
+  // (owner 2026-11-28).
   subscribe: (changed) => {
-    let has = useWebApp.getState().media !== null
+    let playing = useWebApp.getState().media?.playing === true
     return useWebApp.subscribe((state) => {
-      const now = state.media !== null
-      if (now === has) return
-      has = now
+      const now = state.media?.playing === true
+      if (now === playing) return
+      playing = now
       changed(now)
     })
   },

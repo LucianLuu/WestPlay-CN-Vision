@@ -18,6 +18,10 @@
      用户截图二圈出来的那个。兜底成「跳过」（signedIn 时仍用词条里的「继续」）。
   3. 账号页第一行 `Bilibili` → `哔哩哔哩`。
   4. 引导步里 row 名硬编码的 `YouTube` → `哔哩哔哩`。
+  5. 账号页补上两行（owner 2026-11-28 那天接着说）：`酷狗音乐`（`kugou_*`，登录是在
+     车机屏幕上开酷狗自己的扫码）和 `Apple Music`（`apple_music_*`，宿主本来就有这几个命令，
+     3.0 的账号页去掉过）。它们的登录态：酷狗来自宿主状态里的 `kugouSignedIn`（层的
+     `/kugou/health`），Apple Music 还是 `appleMusicSignedIn`。
 
   用法：
     pwsh -File tools/scripts/patch-companion-onboarding.ps1                    # 改仓库 ui/dist
@@ -42,12 +46,6 @@ if ($Restore) {
 }
 
 $text = [IO.File]::ReadAllText($Path)
-$marker = 'let r=e?.webLogins?.bilibili?.signedIn??!1'
-
-if ($text.Contains($marker)) {
-  Write-Output "已修补，跳过：$Path"
-  return
-}
 
 # 1. YouTube 引导步 → 哔哩哔哩（`kr`）
 $krBefore = 'function kr({status:e,next:t,back:n}){let r=e?.youtubeSignedIn??!1,i=e?.youtubeSigningIn??!1,a=zn(e?.youtubeSignedIn!=null,me),o=Ln(r,pe),s=H(),c=s.accounts;'
@@ -78,6 +76,23 @@ $nameAfter = 'ni={bilibili:{name:`哔哩哔哩`,'
 $wordNameBefore = 'bilibili:{title:`Bilibili`,sub:`登录后'
 $wordNameAfter = 'bilibili:{title:`哔哩哔哩`,sub:`登录后'
 
+# 5. 账号页补「酷狗音乐」「Apple Music」两行。服务的登录态取自宿主状态：酷狗是 `kugouSignedIn`
+#    （层的 `/kugou/health`），Apple Music 还是 `appleMusicSignedIn`（宿主本来就有这几个命令）。
+#    酷狗没有网页登录页（层的 `/kugou/qr` 只答 JSON），所以它的「登录」是让车机屏幕把酷狗应用
+#    开起来、用它自己的二维码（宿主收到 `kugou_sign_in` 后通知车机，`state/store.ts` 的 `case 'kugou'`）。
+$servicesBefore = 'words:e=>e.accounts.qqMusic}},ri=[`bilibili`,`netease`,`qqMusic`];'
+$servicesAfter = 'words:e=>e.accounts.qqMusic},kugou:{name:`酷狗音乐`,app:`kugou`,glow:W.spotify,signIn:()=>k(`kugou_sign_in`),signOut:()=>k(`kugou_sign_out`),signingIn:e=>e?.webLogins?.kugou?.signingIn??!1,words:e=>e.accounts.kugou},appleMusic:{name:`Apple Music`,app:`music`,glow:W.music,signIn:()=>k(`apple_music_sign_in`),signOut:()=>k(`apple_music_sign_out`),signingIn:e=>e?.appleMusicSigningIn??!1,words:e=>e.appleMusic}},ri=[`bilibili`,`netease`,`qqMusic`,`kugou`,`appleMusic`];'
+
+$accountsListBefore = 'function De(e){return{bilibili:e?.webLogins?.bilibili?.signedIn??null,netease:e?.webLogins?.netease?.signedIn??null,qqMusic:e?.webLogins?.qqMusic?.signedIn??null}}'
+$accountsListAfter = 'function De(e){return{bilibili:e?.webLogins?.bilibili?.signedIn??null,netease:e?.webLogins?.netease?.signedIn??null,qqMusic:e?.webLogins?.qqMusic?.signedIn??null,kugou:e?.kugouSignedIn??null,appleMusic:e?.appleMusicSignedIn??null}}'
+
+$checksBefore = 'k(`qq_music_check`).catch(()=>{})},[])'
+$checksAfter = 'k(`qq_music_check`).catch(()=>{}),k(`kugou_check`).catch(()=>{})},[])'
+
+# 账号页词条：zh-CN 的 `accounts` 跟着补一块 `kugou`，文案与 `qqMusic` 那块同形。
+$kugouWordsBefore = 'text:`请在浏览器窗口中继续`}}},spotify:{title:`登录 Spotify`'
+$kugouWordsAfter = 'text:`请在浏览器窗口中继续`}},kugou:{title:`酷狗音乐`,sub:`登录后在卡车屏幕上播放自己的歌单和收藏。`,signIn:`登录`,signOut:`退出登录`,signedIn:`已登录`,notSignedIn:`未登录`,finishInWindow:`请在车机屏幕上用酷狗音乐 App 扫码登录`,signingIn:{title:`登录`,text:`请在车机屏幕上的酷狗音乐里扫码`}}},spotify:{title:`登录 Spotify`'
+
 $edits = @(
   @{ what = '引导步 YouTube → 哔哩哔哩'; before = $krBefore; after = $krAfter },
   @{ what = '引导步的 row 名 YouTube → 哔哩哔哩'; before = $rowBefore; after = $rowAfter },
@@ -87,10 +102,19 @@ $edits = @(
   @{ what = '服务登录步的按钮兜底文案'; before = $notNowSiteBefore; after = $notNowSiteAfter },
   @{ what = '哔哩哔哩登录步的按钮兜底文案'; before = $notNowAccountBefore; after = $notNowAccountAfter },
   @{ what = '账号页 Bilibili → 哔哩哔哩'; before = $nameBefore; after = $nameAfter },
-  @{ what = '账号页词条 Bilibili → 哔哩哔哩'; before = $wordNameBefore; after = $wordNameAfter }
+  @{ what = '账号页词条 Bilibili → 哔哩哔哩'; before = $wordNameBefore; after = $wordNameAfter },
+  @{ what = '账号页补酷狗音乐与 Apple Music 两行'; before = $servicesBefore; after = $servicesAfter },
+  @{ what = '账号页两行的登录态（kugouSignedIn / appleMusicSignedIn）'; before = $accountsListBefore; after = $accountsListAfter },
+  @{ what = '账号页挂载时问酷狗的登录态'; before = $checksBefore; after = $checksAfter },
+  @{ what = 'zh-CN 词条补 accounts.kugou'; before = $kugouWordsBefore; after = $kugouWordsAfter }
 )
 
 foreach ($edit in $edits) {
+  # 已经打过的（`after` 就在文件里）跳过，所以从原版或者打了一半的都能接着打。
+  if ($text.Contains($edit.after)) {
+    Write-Output "已是：$($edit.what)"
+    continue
+  }
   $hits = ([regex]::Matches($text, [regex]::Escape($edit.before))).Count
   if ($hits -ne 1) {
     throw "「$($edit.what)」的目标串命中 $hits 次（应为 1），补丁未写入。bundle 可能换过版本。"

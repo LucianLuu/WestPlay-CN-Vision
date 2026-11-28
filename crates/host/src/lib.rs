@@ -150,6 +150,10 @@ pub struct Status {
     /// Whether the sites the apps show are signed in (Bilibili, NetEase Cloud Music, QQ Music), and whether
     /// each one's window is open (weblogin.rs).
     pub web_logins: weblogin::Logins,
+    /// Whether KuGou Music is signed in, as its layer says (`/kugou/health`; `None`: its layer isn't there).
+    /// The app in the cab signs in by a QR, so the layer is the one that knows, and the companion's accounts
+    /// page shows its account from here (owner 2026-11-28).
+    pub kugou_signed_in: Option<bool>,
     /// The map of the profile played: ready, being built, waiting for the game to close...
     pub map: maps::MapStatus,
     /// The map the cab shows: its folder in WestPlay's maps, and when it was built (the companion's
@@ -172,6 +176,9 @@ pub struct AccountRequests {
     pub bilibili: AccountRequest,
     pub netease: AccountRequest,
     pub qq_music: AccountRequest,
+    /// KuGou Music's account, which is its layer's (`/kugou/health`): signing in opens the cab's own app on
+    /// its QR, signing out is the layer's own route (`netease_layer::kugou_sign_out`).
+    pub kugou: AccountRequest,
 }
 
 /// One service's request, the latest not carried out yet.
@@ -752,6 +759,28 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 AccountAction::Check => apple_music::Command::Start,
             });
         }
+        // KuGou Music's account: the cab's own app signs in by a QR (`ui/src/cabin/apps/kugou`), so the
+        // companion's accounts page asks for it and the page brings that app up over the screen with its QR
+        // (`{"type":"kugou","action":"signIn"}`). Signing out is the layer's own route, and asking is what the
+        // status already does every pass (`/kugou/health`).
+        if let Some(action) = config.accounts.kugou.take() {
+            match action {
+                AccountAction::SignIn => {
+                    let _ = webview.post_json(r#"{"type":"kugou","action":"signIn"}"#);
+                }
+                AccountAction::SignOut => {
+                    if let Some(port) = netease_layer::PORTS
+                        .iter()
+                        .copied()
+                        .find(|&port| netease_layer::health(port).is_some())
+                    {
+                        let signed_out = netease_layer::kugou_sign_out(port);
+                        log!("[kugou] signed out on its layer: {signed_out}");
+                    }
+                }
+                AccountAction::Check => {}
+            }
+        }
         // The companion's Bilibili, NetEase Cloud Music and QQ Music sign-ins: their own pages in a window on the
         // desktop, on the profiles the apps in the cab show them on (weblogin.rs).
         for (request, which) in [
@@ -983,6 +1012,13 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
             status.web_logins = now;
         }
+        // KuGou Music's account, on the same layer's own route (`/kugou/health`): its app in the cab signs
+        // in by a QR, so the layer is the one that holds it, and its answer is as live as NetEase's.
+        status.kugou_signed_in = netease_layer::PORTS
+            .iter()
+            .copied()
+            .find(|&port| netease_layer::health(port).is_some())
+            .and_then(netease_layer::kugou);
 
         // Checked often so the game is picked up right away when it starts or switches GPU.
         if last_check.elapsed() >= Duration::from_millis(200) {

@@ -268,6 +268,34 @@ pub fn health(port: u16) -> Option<(bool, String)> {
     Some((signed_in, nickname))
 }
 
+/// One request of the layer's own (`None`: no layer there, or an answer that isn't JSON).
+fn request(port: u16, method: &str, path: &str) -> Option<serde_json::Value> {
+    use std::io::{Read, Write};
+
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(300)).ok()?;
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(900)));
+    let head = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    stream.write_all(head.as_bytes()).ok()?;
+    let mut answer = String::new();
+    stream.read_to_string(&mut answer).ok()?;
+    let body = answer.split("\r\n\r\n").nth(1)?;
+    serde_json::from_str(body).ok()
+}
+
+/// KuGou Music's account, as its own routes answer it (`/kugou/health`): `None` when its layer isn't there.
+/// The account is the layer's — the cab's own app signs in by a QR (`ui/src/cabin/apps/kugou`), and the
+/// companion's accounts page shows it from here (owner 2026-11-28).
+pub fn kugou(port: u16) -> Option<bool> {
+    let parsed = request(port, "GET", "/kugou/health")?;
+    parsed.get("signedIn").and_then(|v| v.as_bool())
+}
+
+/// Signs KuGou Music out on the layer: its own route (`/kugou/signout`), the account's token dropped there.
+pub fn kugou_sign_out(port: u16) -> bool {
+    request(port, "POST", "/kugou/signout").is_some()
+}
+
 /// Waits for the layer to answer, up to `timeout`.
 fn wait_until_answering(port: u16, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;

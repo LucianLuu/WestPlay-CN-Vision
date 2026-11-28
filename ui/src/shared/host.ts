@@ -378,6 +378,10 @@ eteaseCommand's sk): the
   | { type: 'webAppVolume'; volume: number }
   | { type: 'fatigue'; on: boolean }
   | { type: 'trafficLight'; light: TrafficLight | null }
+  /** KuGou Music, asked from the companion's accounts page: the cab's own app comes up with its QR, as it does
+   * when the app is opened to sign in (`cabin/apps/kugou`). The account itself is its layer's
+   * (`/kugou/health`), so the companion shows it from the status. */
+  | { type: 'kugou'; action: 'signIn' }
 
 /** The game's weather: the one there is and the one it's turning to (the same once it has); in game minutes,
  * how long until the game changes it next; and how wet the roads are, percent. Each of the last two `null`

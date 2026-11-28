@@ -265,6 +265,24 @@ fn apple_music_check(accounts: State<Accounts>) {
     accounts.0.apple_music.request(AccountAction::Check);
 }
 
+/// Signs KuGou Music in: the cab's own app comes up over the screen with its QR, as it does when the app is
+/// opened to sign in (`ui/src/cabin/apps/kugou`). Its account is its layer's; nothing opens on the desktop.
+#[tauri::command]
+fn kugou_sign_in(accounts: State<Accounts>) {
+    accounts.0.kugou.request(AccountAction::SignIn);
+}
+
+/// Signs KuGou Music out, on its own layer (`/kugou/signout`).
+#[tauri::command]
+fn kugou_sign_out(accounts: State<Accounts>) {
+    accounts.0.kugou.request(AccountAction::SignOut);
+}
+
+/// Nothing asked of KuGou Music: the status reads its layer's own answer every pass (`/kugou/health`), so the
+/// companion's accounts page has what it needs as it opens.
+#[tauri::command]
+fn kugou_check(_accounts: State<Accounts>) {}
+
 /// The maker's Kreosus page, where players support WestPlay's development.
 const SUPPORT_PAGE: &str = "https://afdian.com/a/west2026";
 
@@ -578,6 +596,9 @@ fn main() {
             apple_music_sign_in,
             apple_music_sign_out,
             apple_music_check,
+            kugou_sign_in,
+            kugou_sign_out,
+            kugou_check,
             open_support_page,
             open_social,
             app_log_place,

@@ -43,6 +43,7 @@ import {
   receiveWebAppVolume,
 } from '../apps/web/webapp'
 import { receiveAnswer, receiveState, useYouTube } from '../apps/youtube/youtube'
+import { useKuGou } from '../apps/kugou/kugou'
 import { receiveCab } from '../apps/netease/spatial'
 import { receiveFolder, receivePlayback as receivePlayerPlayback } from '../apps/player/player'
 import { receiveRadioAnswer } from '../apps/radio/api'
@@ -638,6 +639,13 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       }
       case 'webApp':
         receiveWebApp(message.state)
+        break
+      case 'kugou':
+        // The companion's accounts page asked for KuGou's sign-in: the app's way in is the QR on its own
+        // screen, so that comes up here — the app over the screen, its QR with it (owner 2026-11-28). The
+        // companion can't show it itself: the layer has no page of its own for it (`/kugou/qr` answers JSON).
+        useCabin.getState().navigate({ type: 'openApp', app: 'kugou' })
+        void useKuGou.getState().startLogin()
         break
       case 'webAppMedia':
         receiveWebAppMedia(message.media)
