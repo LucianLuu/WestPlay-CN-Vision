@@ -895,7 +895,12 @@ if let Some(media) = said.as_ref().and_then(|said| said.get("media")) {
         if ratio >= 0.97 {
             return;
         }
-        let fit = (self.fit.get() * ratio).clamp(LEAST_FIT, MOST_FIT);
+        // A site that opens larger than its own size (`Site::opening_zoom`) is never narrowed below it: its pages
+        // are read at arm's length, and a page narrowed back to its own size is the zoom gone (owner 2026-11-28:
+        // "缩放又变回去了"). One that still lays itself out wider than the room is panned with the page's own
+        // scroller (webapp.js), not cut off.
+        let least = if self.site.opening_zoom() > 1.0 { MOST_FIT } else { LEAST_FIT };
+        let fit = (self.fit.get() * ratio).clamp(least, MOST_FIT);
         if (fit - self.fit.get()).abs() < 0.02 {
             return;
         }

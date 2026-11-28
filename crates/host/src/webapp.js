@@ -73,8 +73,17 @@
    * drew, its own bar pinned by a \`flex\` column whose \`body\` must not scroll: opening that scroller pushed the
    * extension's transport down to the end of its list instead of leaving it over the page (owner 2026-11-10).
    */
+  const douyinDocument = /(^|\.)douyin\.com$/i.test(location.hostname)
   const siteScroll = siteDocument
-    ? `html, body { overflow: auto !important; }
+    // Douyin's page holds a desktop shell of its own, and `min-width: min-content` was that shell's whole width
+    // (1384 px): at the zoom it opens at (webapp.rs `Site::opening_zoom`) the page then laid itself out wider than
+    // the room, its right side out of sight — and the fit narrowed the page back to its own size to fit it, so the
+    // zoom read as gone (owner 2026-11-28: "缩放又变回去了"). Left to lay out in the room it has, its feed
+    // reflows to the columns that fit, with the zoom's larger words.
+    ? douyinDocument
+      ? `html, body { overflow: auto !important; }
+  body { min-width: 0 !important; min-height: min-content !important; }`
+      : `html, body { overflow: auto !important; }
   body { min-width: min-content !important; min-height: min-content !important; }`
     : ``
   // A script added to a page's start runs before the page has an <html>: there was nothing to append a <style>
