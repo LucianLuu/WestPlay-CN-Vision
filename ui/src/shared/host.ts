@@ -1185,13 +1185,15 @@ export type YouTubeCommand =
   | { action: 'hide' }
   | { action: 'close' }
   | { action: 'language'; code: string }
-  | { action: 'search'; id: number; query: string; more?: string; filter?: 'channels' | 'playlists' }
+  | { action: 'search'; id: number; query: string; more?: string; filter?: 'channels' | 'playlists' | 'bangumi' | 'film' }
   | { action: 'playlist'; id: number; playlist: string; more?: string }
   | { action: 'channel'; id: number; channel: string; more?: string }
   | { action: 'subscribe'; id: number; channel: string; on: boolean }
   | { action: 'suggest'; id: number; query: string }
   | { action: 'related'; id: number; video: string }
   | { action: 'feed'; id: number; which: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'subscriptions' | 'live'; more?: string }
+  | { action: 'sections'; id: number; which: 'bangumi' | 'film' }
+  | { action: 'shelf'; id: number; row: string; film?: boolean; more?: string }
   | { action: 'profile'; id: number }
   | { action: 'dynamics'; id: number; video?: boolean; more?: string }
   | { action: 'messages'; id: number; kind: 'chat' | 'reply' | 'at' | 'like' }
@@ -1250,6 +1252,17 @@ export interface YouTubeVideo {
   channelId?: string
   /** When it was watched or kept ("今天 15:19"), on the player's own lists. */
   at?: string
+  /** Bilibili's own mark on a season ("全13话", "会员专享"). */
+  badge?: string
+}
+
+/** One row of a series page (追番 or 影视): its title, the row it is (its 查看更多 asks for all of it), and its
+ * seasons, wide (a keep of the player's) or posters. */
+export interface YouTubeSection {
+  title: string
+  row: string
+  wide?: boolean
+  items: YouTubeVideo[]
 }
 
 /** A channel; its texts are YouTube's ("@LofiGirl", "15.8M subscribers", "468 videos"). */
@@ -1281,6 +1294,8 @@ export interface YouTubePlaylist {
 /** YouTube's answer: videos (and the token for more), suggestions, or that it didn't answer. */
 export interface YouTubeAnswer {
   videos?: YouTubeVideo[]
+  /** The rows of a series page (Bilibili's 追番 or 影视): what the player watched, then its recommendations. */
+  sections?: YouTubeSection[]
   more?: string | null
   suggestions?: string[]
   /** Channels a search found; the channel a channel's page is. */
@@ -1398,6 +1413,10 @@ export interface YouTubeDetail {
   coins: string
   favorites: string
   danmaku: string
+  /** A series' or a film's own score ("9.7"), as its page shows it; empty for a video. */
+  score?: string
+  /** The season a series' episodes belong to (`ss47836`), for the app to remember it. */
+  season?: string | null
   /** Its parts: a one-part video is a list of one; a series has each of its own. */
   parts: YouTubePart[]
 }
@@ -1409,6 +1428,14 @@ export interface YouTubePart {
   cid: number
   title: string
   duration: string
+  /** The episode's own line above its title ("水柱·富冈义勇的痛楚"), for a series' parts. */
+  subtitle?: string
+  /** Bilibili's own badge for it ("会员": only a paying account plays it). */
+  badge?: string
+  /** The id the app loads this part by (`ep830494`), for a series' episodes. */
+  episode?: string
+  /** Whether this is the one playing (the season's page says which). */
+  playing?: boolean
 }
 
 /** Text typed, or a key with a meaning of its own. */

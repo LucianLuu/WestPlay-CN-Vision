@@ -844,7 +844,14 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         }
         break
       case 'youtubeAccount':
-        useYouTube.setState({ account: { signedIn: message.signedIn, avatar: message.avatar } })
+        useYouTube.setState({
+          account: {
+            signedIn: message.signedIn,
+            avatar: message.avatar,
+            ...(typeof message.name === 'string' ? { name: message.name.slice(0, 40) } : {}),
+            ...(typeof message.mid === 'string' && /^\d{1,20}$/.test(message.mid) ? { mid: message.mid } : {}),
+          },
+        })
         break
       case 'youtubeSignIn':
         useYouTube.setState({ signingIn: message.open })

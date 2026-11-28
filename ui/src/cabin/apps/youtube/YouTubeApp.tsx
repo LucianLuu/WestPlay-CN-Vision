@@ -7,6 +7,7 @@ import {
   type YouTubeMessage,
   type YouTubePlaylist,
   type YouTubeProfile,
+  type YouTubeSection,
   type YouTubeUnread,
   type YouTubeVideo,
 } from '../../../shared/host'
@@ -37,6 +38,7 @@ import {
   openChannel,
   openPlaylist,
   openResults,
+  openShelf,
   play,
   type Question,
   type SearchFilter,
@@ -279,6 +281,8 @@ function Page({ view }: { view: View }) {
       return <ChannelPage channel={view.channel} />
     case 'playlist':
       return <PlaylistPage playlist={view.playlist} />
+    case 'shelf':
+      return <ShelfPage view={view} />
   }
 }
 
@@ -333,6 +337,7 @@ function Account() {
   }
   return (
     <div className="yt-account">
+      {account.mid && <span className="bili-mid">UID {account.mid}</span>}
       <button type="button" className="yt-me" aria-label={text.youtube.signOut} onClick={() => setMenu(!menu)}>
         {account.avatar ? <img referrerPolicy="no-referrer" src={account.avatar} alt="" /> : <PersonGlyph />}
       </button>
@@ -779,21 +784,22 @@ function BilibiliSection() {
   const section = useYouTube((store) => store.section)
   // A press of 刷新 asks the section's own list again (a new list: its `key`).
   const [round, setRound] = useState(0)
-  // The rail's own lists, Bilibili's titles for them.
+  // The rail's own lists, Bilibili's titles for them. Live rooms were one of them: taken out (owner
+  // 2026-11-26) — a room's picture is laid out by Bilibili for a desktop page with its chat rail, its
+  // 点播台 and its clock, and those are mixed into the stream itself, so the screen could never show the
+  // room alone. Nothing here offers one now, and no room id is ever asked for.
   const titles: Record<typeof section, string> = {
     home: '推荐',
     selected: '精选',
     ranking: '热门',
     bangumi: '追番',
     film: '影视',
-    live: '直播',
   }
   const tabs = [
     { id: 'home' as const, label: '推荐' },
     { id: 'ranking' as const, label: '热门' },
     { id: 'bangumi' as const, label: '追番' },
     { id: 'film' as const, label: '影视' },
-    { id: 'live' as const, label: '直播' },
   ]
   return (
     <div className="bili-section">
@@ -813,11 +819,16 @@ function BilibiliSection() {
           ))}
         </div>
       </div>
-      <VideoList
-        key={`${section}:${round}`}
-        layout="grid"
-        question={(more) => (more ? { action: 'feed', which: section, more } : { action: 'feed', which: section })}
-      />
+      {section === 'bangumi' || section === 'film' ? (
+        /* Its 追番 and 影视 pages are rows, not one list: what was watched, then Bilibili's recommendations. */
+        <BilibiliShelves key={`${section}:${round}`} which={section} />
+      ) : (
+        <VideoList
+          key={`${section}:${round}`}
+          layout="grid"
+          question={(more) => (more ? { action: 'feed', which: section, more } : { action: 'feed', which: section })}
+        />
+      )}
       {/* Its own 刷新, in the corner of the list. */}
       <button
         type="button"
@@ -828,6 +839,161 @@ function BilibiliSection() {
       >
         <RefreshGlyph />
       </button>
+    </div>
+  )
+}
+
+/** Bilibili's 追番 or 影视 page: its rows, not one list — what the player watched last (wide, its 我的追番
+ * beside it), then Bilibili's recommendations (posters, each with its 查看更多). */
+function BilibiliShelves({ which }: { which: 'bangumi' | 'film' }) {
+  const [sections, setSections] = useState<YouTubeSection[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let current = true
+    setSections(null)
+    setFailed(false)
+    ask({ action: 'sections', which }).then((answer) => {
+      if (!current) return
+      if (answer.failed) {
+        setFailed(true)
+        return
+      }
+      setSections(answer.sections ?? [])
+    })
+    return () => {
+      current = false
+    }
+  }, [which])
+  const keeps = which === 'bangumi' ? '我的追番' : '我的追剧'
+  return (
+    <div className="yt-scroll bili-shelves">
+      {failed && <p className="yt-note">Bilibili 没有响应。</p>}
+      {sections === null && !failed && (
+        <div className="bili-shelf">
+          <div className="bili-shelf-head">
+            <span className="bili-shelf-title">&nbsp;</span>
+          </div>
+          <div className="bili-shelf-row wide">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div key={index} className="bili-season wide yt-skeleton" role="progressbar">
+                <span className="bili-season-cover" />
+                <span className="yt-skeleton-line" />
+                <span className="yt-skeleton-line short" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(sections ?? []).map((section) => (
+        <section key={section.title} className="bili-shelf">
+          <div className="bili-shelf-head">
+            <span className="bili-shelf-title">{section.title}</span>
+            <button
+              type="button"
+              className="bili-more"
+              onClick={() =>
+                section.row === 'my'
+                  ? openShelf(keeps, 'my', which === 'film')
+                  : openShelf(section.title, section.row, which === 'film')
+              }
+            >
+              {section.row === 'my' ? keeps : '查看更多'}
+            </button>
+          </div>
+          <div className={section.wide ? 'bili-shelf-row wide' : 'bili-shelf-row'}>
+            {section.items.map((video) => (
+              <SeasonCard key={video.video} video={video} wide={Boolean(section.wide)} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+/** A season's card on a series page: its cover (16:9 when it's a keep, 3:4 as a poster), its badge in the
+ * corner, its title and Bilibili's own line under it. Pressed, its page opens and plays. */
+function SeasonCard({ video, wide }: { video: YouTubeVideo; wide: boolean }) {
+  return (
+    <button type="button" className={wide ? 'bili-season wide' : 'bili-season'} onClick={() => play(video)}>
+      <span className={wide ? 'bili-season-cover' : 'bili-season-cover poster'}>
+        {video.thumbnail ? (
+          <img referrerPolicy="no-referrer" src={video.thumbnail} alt="" loading="lazy" />
+        ) : (
+          <span className="yt-thumb-blank" />
+        )}
+        {video.badge && <span className="bili-season-badge">{video.badge}</span>}
+      </span>
+      <span className="yt-title">{video.title}</span>
+      <span className="yt-sub">{[video.channel, video.age].filter(Boolean).join(' · ')}</span>
+    </button>
+  )
+}
+
+/** One row of a series page, all of it (its 查看更多), a page of seasons at a time. */
+function ShelfPage({ view }: { view: { kind: 'shelf'; title: string; row: string; film: boolean; id: number } }) {
+  const [items, setItems] = useState<YouTubeVideo[]>([])
+  const [more, setMore] = useState<string | null>(null)
+  const [status, setStatus] = useState<'loading' | 'done' | 'failed'>('loading')
+  const asking = useRef(false)
+  const load = useCallback(
+    (next: string | null) => {
+      if (asking.current) return
+      asking.current = true
+      setStatus('loading')
+      ask({ action: 'shelf', row: view.row, film: view.film, more: next ?? undefined }).then((answer) => {
+        asking.current = false
+        if (answer.failed) {
+          setStatus('failed')
+          return
+        }
+        setItems((before) => {
+          const seen = new Set(before.map((video) => video.video))
+          return [...before, ...(answer.videos ?? []).filter((video) => !seen.has(video.video))]
+        })
+        setMore(answer.more ?? null)
+        setStatus('done')
+      })
+    },
+    [view.row, view.film],
+  )
+  useEffect(() => load(null), [load])
+  const wide = view.row === 'my'
+  return (
+    <div
+      className="yt-scroll bili-shelves"
+      onScroll={(event) => {
+        const element = event.currentTarget
+        const nearEnd = element.scrollTop + element.clientHeight > element.scrollHeight - element.clientHeight * 0.8
+        if (more && status === 'done' && nearEnd) load(more)
+      }}
+    >
+      <section className="bili-shelf">
+        <div className="bili-shelf-head">
+          <span className="bili-shelf-title">{view.title}</span>
+        </div>
+        <div className={wide ? 'bili-shelf-row wide' : 'bili-shelf-row'}>
+          {items.map((video) => (
+            <SeasonCard key={video.video} video={video} wide={wide} />
+          ))}
+          {status === 'loading' &&
+            Array.from({ length: wide ? 5 : 7 }, (_, index) => (
+              <div key={index} className={wide ? 'bili-season wide yt-skeleton' : 'bili-season yt-skeleton'} role="progressbar">
+                <span className={wide ? 'bili-season-cover' : 'bili-season-cover poster'} />
+                <span className="yt-skeleton-line" />
+                <span className="yt-skeleton-line short" />
+              </div>
+            ))}
+        </div>
+      </section>
+      {status === 'failed' && (
+        <p className="yt-note">
+          Bilibili 没有响应。{' '}
+          <button type="button" className="yt-chip" onClick={() => load(items.length > 0 ? more : null)}>
+            重试
+          </button>
+        </p>
+      )}
     </div>
   )
 }
@@ -1020,6 +1186,12 @@ function Results({ query, filter }: { query: string; filter: SearchFilter }) {
   const text = useText()
   const filters: { filter: SearchFilter; label: string }[] = [
     { filter: 'all', label: text.youtube.all },
+    ...(currentSite() === 'bilibili'
+      ? ([
+          { filter: 'bangumi', label: '番剧' },
+          { filter: 'film', label: '影视' },
+        ] as const)
+      : []),
     { filter: 'channels', label: text.youtube.channels },
     { filter: 'playlists', label: text.youtube.playlists },
   ]

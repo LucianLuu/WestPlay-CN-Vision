@@ -79,7 +79,8 @@
   border: 0;
 }
 
-/* The search field: Bilibili's own rounded box, grey, its magnifier at the right. */
+/* The search field: Bilibili's own rounded box, grey, its magnifier at the right. Shorter than YouTube's
+   (owner 2026-11-27: 搜索框稍微拉短一些), so the bar's right side keeps room. */
 .youtube-app.bilibili-app .text-field {
   height: 46px;
   border-radius: 8px;
@@ -88,6 +89,7 @@
   padding-inline: 18px;
   font-size: calc(19px * var(--text-scale, 1));
   color: var(--bili-ink);
+  max-width: 70%;
 }
 
 .youtube-app.bilibili-app .text-field::placeholder {
@@ -120,6 +122,21 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
+}
+
+/* The player's UID, beside their picture. */
+.youtube-app.bilibili-app .yt-account {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.bili-mid {
+  color: var(--bili-sub);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* --- The rail: Bilibili's sections down the left -------------------------------------------------------- */
@@ -273,11 +290,12 @@
   font-weight: 500;
   line-height: 1.4;
   color: var(--bili-ink);
-  /* Bilibili's two lines, then an ellipsis. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* Its title, one line and cut: the whole of it never needed (owner 2026-11-27: 标题不用完全显示，
+     中配版往后的字隐藏). */
+  display: block;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .youtube-app.bilibili-app .yt-sub {
@@ -907,7 +925,27 @@
   overflow: hidden;
 }
 
-/* A series' episodes: numbered keys, the one playing lit, Bilibili's own. */
+/* A series' own score under its name ("9.7 分"), as its page shows it. */
+.bili-season-line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.bili-season-score {
+  font-size: calc(20px * var(--text-scale, 1));
+  font-weight: 700;
+  color: var(--bili-pink);
+}
+
+.bili-season-label {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: #9499a0;
+}
+
+/* A series' episodes: Bilibili's own 选集 list — a row each, its number and line, the one playing lit,
+   and its 会员 mark where only a paying account plays it (its page's own list, owner 2026-11-26). */
 .bili-parts {
   padding: 12px 0;
   border-top: 1px solid var(--bili-line);
@@ -922,25 +960,83 @@
 }
 
 .bili-parts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 .bili-part {
-  height: 50px;
-  border: 1px solid var(--bili-line);
-  border-radius: 8px;
-  background: #ffffff;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: #61666d;
-  font-size: calc(17px * var(--text-scale, 1));
-  font-weight: 600;
+  font-size: calc(14px * var(--text-scale, 1));
+  text-align: left;
+  flex: none;
+}
+
+.bili-part:hover {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .bili-part.on {
-  border-color: var(--bili-pink);
   background: var(--bili-pink-dim);
   color: var(--bili-pink);
+}
+
+.bili-part.on .bili-part-num,
+.bili-part.on .bili-part-name {
+  color: var(--bili-pink);
+}
+
+.bili-part-num {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #9499a0;
+}
+
+/* The episode's own name, which is what the list is for. */
+.bili-part-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--bili-ink);
+}
+
+.bili-part-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #9499a0;
+  font-variant-numeric: tabular-nums;
+}
+
+.bili-part.on .bili-part-sub {
+  color: var(--bili-pink);
+  opacity: 0.85;
+}
+
+/* Bilibili's own "会员" pill on an episode only a paying account plays. */
+.bili-part-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: calc(11px * var(--text-scale, 1));
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 /* What comes next, Bilibili's own rows. */
@@ -1857,4 +1953,113 @@
 /* Its scroll box takes the room beside the picture, its own surface either way. */
 .yt-bili-scroll {
   color: var(--bili-ink);
+}
+
+/* --- A series page's rows: its 追番 and 影视, wide keeps then posters ------------------------------------- */
+
+.bili-shelves {
+  display: block;
+  color: var(--bili-ink);
+}
+
+.bili-shelf {
+  margin: 0 0 1.1em;
+}
+
+.bili-shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8em;
+  margin: 0.1em 0 0.55em;
+}
+
+.bili-shelf-title {
+  font-size: 1.35em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.bili-more {
+  font: inherit;
+  font-size: 1em;
+  border: 1px solid rgba(251, 114, 153, 0.5);
+  background: transparent;
+  color: #fb7299;
+  padding: 0.12em 0.7em;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.bili-more:hover {
+  background: rgba(251, 114, 153, 0.12);
+}
+
+.bili-shelf-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.75em;
+}
+
+.bili-shelf-row.wide {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.bili-season {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.bili-season-cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 0.5em;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.bili-season-cover.poster {
+  aspect-ratio: 3 / 4;
+}
+
+.bili-season-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bili-season-badge {
+  position: absolute;
+  right: 0.3em;
+  bottom: 0.3em;
+  padding: 0.05em 0.35em;
+  border-radius: 0.25em;
+  background: rgba(0, 0, 0, 0.68);
+  color: #fff;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.bili-season .yt-title {
+  font-size: 0.98em;
+}
+
+.bili-season .yt-sub {
+  font-size: 0.9em;
+}
+
+.youtube-app.bilibili-app.bili-dark .bili-season-cover {
+  background: rgba(255, 255, 255, 0.06);
 }

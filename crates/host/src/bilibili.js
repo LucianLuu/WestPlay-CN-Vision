@@ -26,6 +26,10 @@
    *
    * `credentials: include` carries the page's cookies: it's what makes search work at all (without them
    * Bilibili answers 412), and what lets a signed-in player's own feed answer with their subscriptions.
+   *
+   * Its answers carry what they have under `data` — except PGC's (series' and films' own pages:
+   * `/pgc/view/web/season`), which put it under `result`. Both are answered, so a caller needn't know
+   * which family of interface it asked (owner 2026-11-26: a series' details came back empty for this).
    */
   const api = async (path, params = {}) => {
     const url = new URL(path, 'https://api.bilibili.com')
@@ -36,7 +40,7 @@
     if (!response.ok) throw new Error(path + ': ' + response.status)
     const answer = await response.json()
     if (answer && answer.code !== 0) throw new Error(path + ': ' + answer.code + ' ' + (answer.message || ''))
-    return answer.data
+    return answer.data !== undefined ? answer.data : answer.result
   }
 
   /**
@@ -158,10 +162,17 @@
     /* Everything gone: Bilibili's header, its navigation, its video page's title and toolbars, its comments.
        Only the picture comes back (below), and its subtitles. */
     body * { visibility: hidden !important; }
-    /* The picture, and only it: its element and the boxes it sits in. */
-    .bpx-player-video-wrap, .bpx-player-video-wrap *,
+    /* The picture, and only it: its element and the boxes it sits in.
+       Not the boxes' children: the player's own layers inside the video area (its top and bottom masks, its
+       progress-schedule and shadow-progress layers, its control rows) are full-size boxes with a black
+       background and a z-index of 2^31-1, and they sit over the <video> in the page's own stacking. On a
+       browser the video's compositor layer paints over them, so they're never seen; the host's capture misses
+       that layer, so a blanket "the video area's children are visible" puts those black masks back over the
+       picture — the whole picture area paints black (owner 2026-11-27: 只有声音没有画面，其实是黑色遮罩).
+       Left hidden, the only thing over the black background is the <video> (which the capture misses) and
+       WestPlay's own copy of the picture (.westplay-mirror, a canvas the capture does take). */
+    .bpx-player-video-wrap,
     #bilibili-player video, #bilibili-player .bpx-player-video-area,
-    #bilibili-player .bpx-player-video-area *,
     video { visibility: visible !important; }
     /* Anything of Bilibili's own chrome is out for good, whatever the page does with it. */
     .bili-header, .bili-header *,
@@ -181,21 +192,20 @@
     .nav-bar, .nav-bar *,
     .left-entry, .right-entry, .center-search-container,
     .bili-header__bar, .bili-header__channel,
-    .ad-report, .ad-report *, .activity-m-v1, .activity-m-v1 * {
-      display: none !important;
-    }
+    .ad-report, .ad-report *, .activity-m-v1, .activity-m-v1 *,
     /* Its picture over the whole page, wherever Bilibili put its own box. */
     #bilibili-player, #bilibili-player .bpx-player-container, #bilibili-player .bpx-player-video-area,
     #bilibili-player .bpx-player-video-wrap { position: fixed !important; inset: 0 !important;
       width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important;
       background: #000 !important; overflow: hidden !important; }
-    #bilibili-player video, #bilibili-player .bpx-player-video-wrap video {
-      position: absolute !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
-      left: 0 !important; top: 0 !important; object-fit: contain !important; }
     /* Filling a box of another shape: cropped, no bars. */
     html.westplay-crop #bilibili-player video { object-fit: cover !important; }
     /* Its own captions, when they're on. */
     .bpx-player-subtitle-panel, .bpx-player-subtitle-panel * { visibility: visible !important; }
+    /* WestPlay's own copy of the picture (see below): over the video, under Bilibili's captions. */
+    .westplay-mirror { position: fixed !important; inset: 0 !important; width: 100vw !important;
+      height: 100vh !important; pointer-events: none !important; visibility: visible !important;
+      background: transparent !important; }
   `
   const addStyle = () => {
     const parent = document.head || document.documentElement
@@ -203,6 +213,134 @@
     else requestAnimationFrame(addStyle)
   }
   addStyle()
+
+  // --- The picture drawn again where the host can take it -----------------------------------------------------
+  //
+  // The host's capture of this page (Windows Graphics Capture of the browser's visual) takes everything of it
+  // but the video: the player's <video> is handed to the compositor as a layer of its own (a hardware overlay or
+  // a swapchain of its own), and the capture leaves that layer out — the details beside it, its controls and its
+  // progress bar are all there, its picture black. The browser's own switches were tried and don't change it
+  // (owner 2026-11-27, after `--disable-accelerated-video-decode` and then `--disable-gpu-compositing` both left
+  // the picture black).
+  //
+  // So the page draws the picture itself: the <video>'s frames copied into a <canvas> over it, once per frame,
+  // which the capture takes as it takes any other part of the page (a canvas is an ordinary layer). The canvas
+  // follows the video's own box: its `object-fit` (`cover` as WestPlay's style makes it, or Bilibili's own
+  // `contain`), its letterboxing, and its place on the page. Bilibili's captions sit above it still (the canvas
+  // is put in the page right after the <video>, so whatever follows it paints over it).
+  //
+  // Nothing of the sound goes through it, and the video itself is left playing as it was: a player who sees this
+  // page on a desktop sees exactly what Bilibili draws, and a truck's screen now sees it too.
+  const mirror = (() => {
+    let canvas = null
+    let context = null
+    let video = null
+    let drawnAt = -1
+    /** Puts the canvas in the page right after `element`, where whatever follows it (the captions) paints over it. */
+    const place = (element) => {
+      canvas.className = 'westplay-mirror'
+      if (element.parentNode) element.parentNode.insertBefore(canvas, element.nextSibling)
+    }
+
+    /** The video's picture where its box and its `object-fit` put it: its part to draw, and where on the canvas. */
+    const picture = () => {
+      const width = video.videoWidth
+      const height = video.videoHeight
+      if (!width || !height) return null
+      const box = video.getBoundingClientRect()
+      if (box.width <= 0 || box.height <= 0) return null
+      const fit = getComputedStyle(video).objectFit
+      // `fill` draws all of it in the box; `cover` all of the box out of it, cropping it; the rest fit it in, bars
+      // round it (`contain`, and `none`, which no player here asks for).
+      if (fit === 'fill') {
+        return { from: [0, 0, width, height], into: [box.left, box.top, box.width, box.height] }
+      }
+      const scale =
+        fit === 'cover'
+          ? Math.max(box.width / width, box.height / height)
+          : Math.min(box.width / width, box.height / height)
+      const scaled = { width: width * scale, height: height * scale }
+      const at = {
+        left: box.left + (box.width - scaled.width) / 2,
+        top: box.top + (box.height - scaled.height) / 2,
+      }
+      if (fit === 'cover') {
+        // The part of the picture its box shows: its middle, as big as the box.
+        const part = { width: box.width / scale, height: box.height / scale }
+        return {
+          from: [(width - part.width) / 2, (height - part.height) / 2, part.width, part.height],
+          into: [box.left, box.top, box.width, box.height],
+        }
+      }
+      return { from: [0, 0, width, height], into: [at.left, at.top, scaled.width, scaled.height] }
+    }
+
+    /** Draws the video's frame as it is now: its picture where the page shows it, black where it doesn't. */
+    const draw = () => {
+      if (!canvas || !context || !video || video.readyState < 2) return
+      const shown = picture()
+      if (!shown) return
+      const across = Math.max(1, Math.round(window.innerWidth))
+      const down = Math.max(1, Math.round(window.innerHeight))
+      if (canvas.width !== across || canvas.height !== down) {
+        canvas.width = across
+        canvas.height = down
+      }
+      context.fillStyle = '#000'
+      context.fillRect(0, 0, across, down)
+      // A frame it can't copy (a protected one) is left black, as the capture had it: nothing thrown out of here.
+      context.drawImage(video, ...shown.from, ...shown.into)
+    }
+
+    /** Puts the canvas over the video the page has now, if it isn't over it already. */
+    const attach = () => {
+      const found = document.querySelector('#bilibili-player video') || document.querySelector('video')
+      if (!found) return
+      if (found !== video || !canvas || !canvas.isConnected) {
+        video = found
+        drawnAt = -1
+        if (!canvas) {
+          canvas = document.createElement('canvas')
+          context = canvas.getContext('2d')
+          if (!context) {
+            canvas = null
+            return
+          }
+        }
+        place(video)
+      }
+    }
+
+    /** One turn: the canvas over the video the page has now, and its frame drawn if it moved on. */
+    const tick = () => {
+      try {
+        attach()
+        // The page's own frames come at its own rate: nothing drawn again while the video stands still (a seek
+        // moves it without playing, and is drawn).
+        if (video && video.readyState >= 2 && (!video.paused || drawnAt !== video.currentTime)) {
+          drawnAt = video.currentTime
+          draw()
+        }
+      } catch {
+        // A frame missed is a frame missed; the next one is tried.
+      }
+    }
+    const frame = () => {
+      requestAnimationFrame(frame)
+      tick()
+    }
+    requestAnimationFrame(frame)
+    // The browser holds `requestAnimationFrame` back in a page it keeps offscreen, as this one is: drawn on a timer
+    // too, 25 times a second, whichever comes first with the same frame (the same `currentTime` drawn once).
+    setInterval(tick, 40)
+    setInterval(attach, 1000)
+  })()
+
+  // Live rooms are gone from WestPlay (owner 2026-11-26). They were dropped because a room's picture is laid
+  // out by Bilibili for a desktop page — its chat rail, its 点播台, the clock at its foot — and reading the
+  // <video>'s own pixels at those very points shows them there: they are mixed into the stream the streamer
+  // broadcasts, so the truck's screen could never show the room alone. Every rule and every branch that
+  // served a room went with it; a room's id is refused rather than loaded.
 
   // --- What the app shows, from Bilibili's own answers -----------------------------------------------------
 
@@ -415,6 +553,25 @@
     }
   }
 
+  /** A season as a series page's cards show it: its own cover, its episodes' mark, its score. */
+  const seasonCard = (item, followed) => {
+    const score = (item.rating && item.rating.score) || item.score || ''
+    return {
+      // A season's own id, in its link's place: the page opens it there (`ss` and the id).
+      video: 'ss' + item.season_id,
+      title: plain(item.title),
+      channel: plain((followed ? item.subtitle : item.subTitle) || item.season_type_name || ''),
+      avatar: null,
+      thumbnail: picture(item.cover),
+      duration: '',
+      views: '',
+      age: score ? String(score) + '\u5206' : '',
+      live: false,
+      channelId: null,
+      badge: plain((item.new_ep && item.new_ep.index_show) || item.index_show || ''),
+    }
+  }
+
   /** A channel (an UP \u4e3b) as the app shows it. */
   const fromUp = (up) => ({
     channel: String(up.mid || ''),
@@ -587,24 +744,29 @@
   /**
    * What this page is playing: a video's BV number, or a season's own id (`ss` and its number) on a bangumi
    * or film page. `null`: a page with nothing playing (the front page).
+   *
+   * Live rooms are gone from WestPlay (owner 2026-11-26): a room's picture is laid out by Bilibili for a
+   * desktop page, its chat rail and 点播台 and clock mixed into the stream itself, so the truck's screen could
+   * never show the room alone. Nothing asks for one, and a room's page reports nothing any more.
    */
   const current = () => {
-    // A live room, on the live site (`https://live.bilibili.com/22625027`): its own id, as the app lists it.
-    if (location.hostname.startsWith('live.')) {
-      const room = location.pathname.match(/^\/(\d+)/)
-      return room ? 'lv' + room[1] : null
-    }
     const video = location.pathname.match(/\/video\/(BV[\w]+)/)
     if (video) return video[1]
-    // A live room (`/live/12345`): its own id, as the app lists it (`lv` and the number).
-    const live = location.pathname.match(/\/live\/(\d+)/)
-    if (live) return 'lv' + live[1]
     // A series: its own play page (`/bangumi/play/ss47836`), or an episode's (`/bangumi/play/ep123456`). An
-    // episode belongs to a season the page carries (`__INITIAL_STATE__`), which is what the app lists it as.
+    // episode belongs to a season the page carries, which is what the app lists it as.
     const season = location.pathname.match(/\/bangumi\/play\/(ss\d+|ep\d+)/)
     if (!season) return null
     const leaf = season[1]
-    if (leaf.startsWith('ss')) return leaf
+    if (leaf.startsWith('ss')) {
+      // A season's own page plays one of its episodes and says which in its canonical address
+      // (`<link rel=canonical>` / `og:url`: `/bangumi/play/ep830494`). It reports that episode, not the
+      // season: the app asked for `ss47836` and was told about `ep830494`, took the two for different
+      // videos, and never showed the picture it had asked for (owner 2026-11-26: "番剧的视频无法加载").
+      // Its own episode is answered instead, which is the video playing and what the app can follow.
+      const episode = canonicalEpisode()
+      if (episode) return episode
+      return leaf
+    }
     const state = window.__INITIAL_STATE__
     const seasonId = state?.epInfo?.season_id ?? state?.epList?.[0]?.season_id
     return seasonId ? 'ss' + seasonId : leaf
@@ -613,24 +775,72 @@
   /** The part this page is playing (its `?p=`), 1 when it has none. */
   const playingPart = () => Number(new URLSearchParams(location.search).get('p')) || 1
 
+  /**
+   * Whether `asked` is another episode than the one playing (`here`): a series' 选集 picking one asks for
+   * its own `ep…`, and two different episodes are two watches even though they belong to one season.
+   */
+  const differentEpisode = (here, asked) => {
+    const isEpisode = (id) => /^ep\d+$/.test(id || '')
+    if (isEpisode(here) && isEpisode(asked)) return here !== asked
+    // A season's id is not an episode: it means "the one this page plays", which is what's here.
+    return false
+  }
+
+  /**
+   * Whether what this page plays (`here`) is the video the app asked for (`asked`), where the two may be
+   * written differently: a season's own page plays one of its episodes (`ss47836` → `ep830494`) and
+   * reports that node. Same watch either way, so nothing is loaded again and nothing reloads the page.
+   */
+  const sameWatch = (here, asked) => {
+    if (!here || !asked) return false
+    if (here === asked) return true
+    const isEpisode = (id) => /^ep\d+$/.test(id)
+    const isSeason = (id) => /^ss\d+$/.test(id)
+    return (isSeason(asked) && isEpisode(here)) || (isEpisode(asked) && isSeason(here))
+  }
+
+  /**
+   * The episode a season's own page is playing: its canonical address names it (`/bangumi/play/ep830494`),
+   * and its own initial data the episode playing (`__INITIAL_STATE__.epInfo.ep_id`, on the pages that still
+   * carry it). `null` where neither says (a season's page with nothing playable): the address's own then.
+   */
+  const canonicalEpisode = () => {
+    const canonical = document.querySelector('link[rel=canonical]')?.href || ''
+    const fromCanonical = canonical.match(/\/bangumi\/play\/(ep\d+)/)
+    if (fromCanonical) return fromCanonical[1]
+    const state = window.__INITIAL_STATE__
+    const playing = state?.epInfo?.ep_id
+    if (playing) return 'ep' + playing
+    // The page's own Next.js data (the player these pages ship): its episode is the one playing.
+    const next = window.__NEXT_DATA__ && window.__NEXT_DATA__.props
+    const episode = next && next.pageProps && (next.pageProps.epInfo || {}).ep_id
+    if (episode) return 'ep' + episode
+    return null
+  }
+
   /** Loads a video in the page's own player: its watch page, which is what makes it play at all. `part`: a
    * series' own part (its `?p=`), the app's 选集. */
   const watch = (video, start, part) => {
     // A season (`ss` and its id), or one of its episodes (`ep` and its id): a series Bilibili plays in its own
     // bangumi page, not a video's watch page.
-    if (video.startsWith('ss')) {
+    if (video.startsWith('ss') || video.startsWith('ep')) {
+      // On that very watch already (its own page may be the season's, or one of its episodes'): its player
+      // is told to play, and the page is left where it is. Navigating anyway reloaded it every time the
+      // app asked again (owner 2026-11-26: 番剧一直加载不出来).
+      //
+      // Another episode of that season is another watch: its own address, which the page plays (the app's
+      // 选集), and this is where a series' episodes are picked.
+      if (sameWatch(current(), video) && !differentEpisode(current(), video)) {
+        const element = player()
+        if (element) playIt(element)
+        return
+      }
       location.href = '/bangumi/play/' + video
       return
     }
-    if (video.startsWith('ep')) {
-      location.href = '/bangumi/play/' + video
-      return
-    }
-    // A live room: its own page, on the live site, where its stream plays.
-    if (video.startsWith('lv')) {
-      location.href = 'https://live.bilibili.com/' + video.slice(2)
-      return
-    }
+    // A live room's id (`lv…`) is no longer loaded: rooms are gone from WestPlay (see `current`), and a
+    // room's id can only come from a list that no longer offers one.
+    if (video.startsWith('lv')) return
     const query = []
     if (part && part > 1) query.push('p=' + part)
     if (start) query.push('t=' + Math.floor(start))
@@ -671,6 +881,87 @@
   // --- What the app asks ------------------------------------------------------------------------------------
 
   /**
+   * A series' or a film's own page (`ss…`, or one of its `ep…`), worked out from PGC's season answer: what
+   * the app shows beside the picture, and its 选集 — every episode, each with the id the page plays it by.
+   *
+   * `null` for a video (`BV…`), whose page is `/x/web-interface/view`'s.
+   */
+  const pgcDetail = async (video) => {
+    const isSeason = /^ss\d+$/.test(video || '')
+    const isEpisode = /^ep\d+$/.test(video || '')
+    if (!isSeason && !isEpisode) return null
+    try {
+      // A season by its id; an episode's season is the one it belongs to (PGC names it).
+      const seasonId = isSeason ? video.slice(2) : await seasonOfEpisode(video.slice(2))
+      if (!seasonId) return null
+      const data = await api('/pgc/view/web/season', { season_id: seasonId })
+      if (!data) return null
+      const episodes = data.episodes || []
+      // The season's own sections besides the episodes (PV, trailers: "PV＆其他"), a flat list after them.
+      const extra = []
+      for (const section of data.section || []) {
+        for (const episode of section.episodes || []) extra.push(episode)
+      }
+      const all = episodes.concat(extra)
+      const playing = isEpisode ? video : canonicalEpisode() || ''
+      // Its parts: every episode the season has, the one playing marked by its own id. `page` is the
+      // number the list shows (`选集 · 1/25`, `第1话`), `episode` the id the app loads it by.
+      const parts = all
+        .filter((episode) => episode && episode.ep_id)
+        .map((episode, index) => ({
+          page: index + 1,
+          cid: Number(episode.cid) || 0,
+          title: plain(String(episode.title || '')) || String(index + 1),
+          // A film's own name is its only episode's title; a series' episodes carry theirs ("1", "2").
+          subtitle: plain(String(episode.long_title || '')).slice(0, 80),
+          duration: episode.duration ? length(Math.round(Number(episode.duration) / 1000)) : '',
+          // `会员`: only a paying account plays it (its own badge, shown as Bilibili shows it).
+          badge: episode.badge || '',
+          episode: 'ep' + episode.ep_id,
+          playing: 'ep' + episode.ep_id === playing,
+        }))
+      const first = all[0] || {}
+      return {
+        video: isSeason ? video : video,
+        title: plain(String(data.title || '')),
+        desc: plain(String(data.summary || '')).slice(0, 400),
+        channel: plain(String((data.up_info && data.up_info.uname) || '')),
+        channelId: data.up_info && data.up_info.mid ? String(data.up_info.mid) : null,
+        avatar: face(data.up_info && data.up_info.face),
+        pubdate: data.publish && data.publish.pub_time ? plain(String(data.publish.pub_time)).slice(0, 20) : '',
+        views: data.stat && data.stat.views ? count(data.stat.views) + '\u64ad\u653e' : '',
+        likes: data.stat && data.stat.likes ? count(data.stat.likes) : '',
+        coins: data.stat && data.stat.coins ? count(data.stat.coins) : '',
+        favorites: data.stat && data.stat.favorites ? count(data.stat.favorites) : '',
+        danmaku: data.stat && data.stat.danmakus ? count(data.stat.danmakus) : '',
+        // The season itself: its score and whether the player follows it, as its own page shows them.
+        score: data.rating && data.rating.score ? String(data.rating.score) : '',
+        season: isSeason ? video : first.season_id ? 'ss' + first.season_id : null,
+        parts,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /** The season (`ss…` without its prefix) an episode (`ep…` without its prefix) belongs to. */
+  const seasonOfEpisode = async (epId) => {
+    const known = episodeSeasons.get(epId)
+    if (known) return known
+    try {
+      const data = await api('/pgc/view/web/season', { ep_id: epId })
+      const found = data && (data.season_id || (data.episodes && data.episodes[0] && data.episodes[0].season_id))
+      if (found) episodeSeasons.set(epId, String(found))
+      return found ? String(found) : null
+    } catch {
+      return null
+    }
+  }
+  /** An episode's season, once asked (the page asks for the same episode's details again and again). */
+  const episodeSeasons = new Map()
+
+
+  /**
    * Answers one of the app's questions: search, suggestions, Up next, the player's feed, an UP's page.
    *
    * The shapes are YouTube's (`Answer` in bilibili.rs), which is what the app draws: the same video, channel
@@ -683,7 +974,14 @@
         // Bilibili's search, the videos' tab (or the UP \u4e3bs'); `more` is the page after it.
         const page = command.more ? Math.max(1, Number(command.more) || 1) : 1
         const data = await api('/x/web-interface/search/type', {
-          search_type: command.filter === 'channels' ? 'bili_user' : 'video',
+          search_type:
+            command.filter === 'channels'
+              ? 'bili_user'
+              : command.filter === 'bangumi'
+                ? 'media_bangumi'
+                : command.filter === 'film'
+                  ? 'media_ft'
+                  : 'video',
           keyword: command.query,
           page,
           page_size: 30,
@@ -691,6 +989,16 @@
         if (command.filter === 'channels') {
           const ups = ((data && data.result) || []).filter((up) => up.mid).map(fromUp)
           reply({ channels: ups, videos: [], more: ups.length > 0 ? String(page + 1) : null })
+          return
+        }
+        if (command.filter === 'bangumi' || command.filter === 'film') {
+          // Bilibili's own 番剧 and 影视 tabs of a search: seasons, not videos.
+          const found = ((data && data.result) || []).filter((item) => item.season_id)
+          reply({
+            videos: found.map((item) => seasonCard(item, false)),
+            channels: [],
+            more: found.length > 0 ? String(page + 1) : null,
+          })
           return
         }
         const found = resultsIn(data, page)
@@ -776,39 +1084,6 @@
           reply({ videos: items.map(fromItem), more: items.length > 0 ? String(page + 1) : null })
           return
         }
-        if (command.which === 'live') {
-          // Bilibili's own live rooms (its 直播): the busiest on air, a page at a time. Its `/xlive/` list refuses
-          // the page's own cookies (-352), its older area list answers them.
-          const page = command.more ? Math.max(1, Number(command.more) || 1) : 1
-          const size = 30
-          const data = await api('https://api.live.bilibili.com/room/v1/Area/getRoomList', {
-            platform: 'web',
-            parent_area_id: 9,
-            cate_id: 0,
-            area_id: 0,
-            sort_type: 'online',
-            page,
-            page_size: size,
-          })
-          const items = Array.isArray(data) ? data : (data && data.list) || []
-          const rooms = items
-            .filter((room) => room.roomid)
-            .map((room) => ({
-              // A room's own id: the page opens it at its own address (`lv` and the number).
-              video: 'lv' + room.roomid,
-              title: plain(room.title),
-              channel: room.uname || '',
-              avatar: face(room.face),
-              thumbnail: picture(room.cover || room.system_cover || room.user_cover),
-              duration: '',
-              views: room.online ? count(room.online) + '\u4eba\u5728\u770b' : '',
-              age: room.area_name || '',
-              live: true,
-              channelId: room.uid ? String(room.uid) : null,
-            }))
-          reply({ videos: rooms, more: rooms.length > 0 && items.length >= size ? String(page + 1) : null })
-          return
-        }
         if (command.which === 'subscriptions') {
           // The videos of the UP \u4e3bs the player follows: Bilibili's own feed of them.
           const data = await api('/x/web-interface/feed/rcmd', { ps: 20, fresh_type: 3 })
@@ -820,6 +1095,143 @@
         const data = await api('/x/web-interface/index/top/feed/rcmd', { ps: 20, fresh_idx: page })
         const items = ((data && data.item) || []).filter((item) => item.bvid)
         reply({ videos: items.map(fromItem), more: items.length > 0 ? String(page + 1) : null })
+        return
+      }
+      if (command.action === 'sections') {
+        // A series page's rows (its 追番 or 影视 tab): what the player watched last (wide), then Bilibili's
+        // recommendations. A row Bilibili doesn't answer is left out, not failed.
+        const bangumi = command.which !== 'film'
+        const rows = bangumi
+          ? [
+              { title: '番剧推荐', row: 'bangumi', season_type: 1 },
+              { title: '国创推荐', row: 'guochuang', season_type: 4 },
+            ]
+          : [
+              { title: '正在热播', row: 'hot', season_type: 5 },
+              { title: '电影热播', row: 'movie', season_type: 2 },
+            ]
+        const sections = []
+        try {
+          // What the player watched of them (Bilibili's own "看过" list, which carries where they got to:
+          // "看到第14话 8:19"), the seasons it last took up first.
+          const nav = await api('/x/web-interface/nav')
+          if (nav && nav.isLogin && nav.mid) {
+            const data = await api('/x/space/bangumi/follow/list', {
+              vmid: String(nav.mid),
+              type: bangumi ? 1 : 2,
+              follow_status: 2,
+              pn: 1,
+              ps: 12,
+              platform: 'web',
+            })
+            const items = ((data && data.list) || []).filter((item) => item.season_id)
+            if (items.length > 0) {
+              sections.push({
+                title: '历史观看',
+                row: 'my',
+                wide: true,
+                items: items.slice(0, 10).map((item) => ({
+                  video: 'ss' + item.season_id,
+                  title: plain(item.title),
+                  channel: plain(item.progress || item.subtitle || ''),
+                  avatar: null,
+                  thumbnail: picture(item.cover),
+                  duration: '',
+                  views: '',
+                  age: '',
+                  live: false,
+                  channelId: null,
+                  badge: plain((item.new_ep && item.new_ep.index_show) || item.index_show || ''),
+                })),
+              })
+            }
+          }
+        } catch {}
+        for (const row of rows) {
+          try {
+            const data = await api('/pgc/season/index/result', {
+              season_type: row.season_type,
+              page: 1,
+              pagesize: 20,
+              order: 3,
+              st: 1,
+              sort: 0,
+              type: 1,
+              area: -1,
+              year: -1,
+            })
+            const items = ((data && data.list) || []).filter((item) => item.season_id)
+            if (items.length > 0) {
+              sections.push({
+                title: row.title,
+                row: row.row,
+                wide: false,
+                items: items.map((item) => seasonCard(item, false)),
+              })
+            }
+          } catch {}
+        }
+        if (sections.length === 0) {
+          reply({ failed: true })
+          return
+        }
+        reply({ sections })
+        return
+      }
+      if (command.action === 'shelf') {
+        // One row of a series page, all of it (its 查看更多): the player's keeps, or one of Bilibili's own
+        // catalogues, a page at a time.
+        const page = command.more ? Math.max(1, Number(command.more) || 1) : 1
+        const rows = {
+          bangumi: 1,
+          guochuang: 4,
+          hot: 5,
+          movie: 2,
+        }
+        if (command.row === 'my') {
+          const nav = await api('/x/web-interface/nav')
+          if (!nav || !nav.isLogin || !nav.mid) {
+            reply({ videos: [], more: null })
+            return
+          }
+          const data = await api('/x/space/bangumi/follow/list', {
+            vmid: String(nav.mid),
+            type: command.film ? 2 : 1,
+            follow_status: 0,
+            pn: page,
+            ps: 30,
+            platform: 'web',
+          })
+          const items = ((data && data.list) || []).filter((item) => item.season_id)
+          const total = Number((data && data.total) || 0)
+          const hasNext = Boolean(data && data.has_next) || total > page * 30
+          reply({
+            videos: items.map((item) => seasonCard(item, true)),
+            more: hasNext && items.length > 0 ? String(page + 1) : null,
+          })
+          return
+        }
+        const seasonType = rows[command.row]
+        if (!seasonType) {
+          reply({ failed: true })
+          return
+        }
+        const data = await api('/pgc/season/index/result', {
+          season_type: seasonType,
+          page,
+          pagesize: 30,
+          order: 3,
+          st: 1,
+          sort: 0,
+          type: 1,
+          area: -1,
+          year: -1,
+        })
+        const items = ((data && data.list) || []).filter((item) => item.season_id)
+        reply({
+          videos: items.map((item) => seasonCard(item, false)),
+          more: data && data.has_next && items.length > 0 ? String(page + 1) : null,
+        })
         return
       }
       if (command.action === 'danmaku') {
@@ -869,6 +1281,16 @@
       if (command.action === 'detail') {
         // A video's own page: its player's data, its uploader, its numbers, and its parts (a multi-part video
         // is several of them, each played on its own).
+        //
+        // A series or a film (`ss…`, `ep…`) is not a video: its page is PGC's, and `/x/web-interface/view`
+        // has nothing for it — the app's 选集 (the parts list) came back empty, so a series could only
+        // ever play the one episode it opened on (owner 2026-11-26: "选集还是有问题"). Its own season
+        // carries every episode, each with the `ep` id and the `cid` that plays it.
+        const season = await pgcDetail(command.video)
+        if (season) {
+          reply({ detail: season })
+          return
+        }
         const data = await api('/x/web-interface/view', { bvid: command.video })
         if (!data) {
           reply({ failed: true })
@@ -901,7 +1323,7 @@
         })
         return
       }
-      if (command.action === 'related') {
+  if (command.action === 'related') {
         // Up next on a video's page: Bilibili's own related videos.
         const data = await api('/x/web-interface/archive/related', { bvid: command.video })
         const items = (Array.isArray(data) ? data : []).filter((item) => item.bvid)
@@ -1290,6 +1712,8 @@
     'related',
     'detail',
     'feed',
+    'sections',
+    'shelf',
     'channel',
     'subscribe',
     'playlist',
@@ -1349,7 +1773,17 @@
     const element = player()
     if (command.action === 'load') {
       const part = Number(command.part) || 0
-      if (element && current() === command.video && (!part || part === playingPart())) {
+      // The video this page plays may be the season's own episode where the app listed the season
+      // (`ss47836` plays as `ep830494`): taking them for different videos reloaded the same page every
+      // time the app asked again, so a series never got as far as its picture (owner 2026-11-26:
+      // 番剧无法加载). One watch, nothing to load.
+      //
+      // A **different episode** of that same season is not the same watch, though: `load` with another
+      // `ep` is the app's 选集 picking one, and the page has to go there (owner 2026-11-26: "选集还是
+      // 有问题" — this test answered "same" for every episode of the season, so picking one did nothing).
+      const here = current()
+      const same = here === command.video || (sameWatch(here, command.video) && !differentEpisode(here, command.video))
+      if (element && same && (!part || part === playingPart())) {
         if (command.start) element.currentTime = command.start
         playIt(element)
       } else {

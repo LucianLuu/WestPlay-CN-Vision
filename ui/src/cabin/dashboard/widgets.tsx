@@ -17,6 +17,13 @@ import {
   useNetease,
   useNeteaseSource,
 } from '../apps/netease/netease'
+import {
+  setVolume as setKugouVolume,
+  skipTrack as skipKugou,
+  useKuGou,
+  useKuGouSource,
+} from '../apps/kugou/kugou'
+import { playOrPause as playOrPauseKugou } from '../apps/kugou/pauseWithGame'
 import { TrackSlide } from '../apps/music/TrackSlide'
 import { useTrackTransition } from '../apps/music/useTrackTransition'
 import { playOrPause, setVolume as setSpotifyVolume, skip, useSpotify, useSpotifySource } from '../apps/spotify/spotify'
@@ -69,7 +76,8 @@ import { cabClock } from '../../shared/host'
  */
 export function NowPlayingWidget() {
   const shown = useCabin((state) => state.dashboardWidgets.nowPlaying)
-  const { showing, bilibili, webApp, spotify, appleMusic, youtubeMusic, qqMusic, netease, player, radio } = useNowPlaying()
+  const { showing, bilibili, webApp, spotify, appleMusic, youtubeMusic, qqMusic, netease, kugou, player, radio } =
+    useNowPlaying()
   return (
     <div className={`widget-slot${shown ? ' open' : ''}`}>
       {shown && showing === 'video' && <VideoWidget />}
@@ -82,6 +90,7 @@ export function NowPlayingWidget() {
       {shown && showing === 'youtubeMusic' && youtubeMusic && <YouTubeMusicWidget youtubeMusic={youtubeMusic} />}
       {shown && showing === 'qqMusic' && qqMusic && <QqMusicWidget qqMusic={qqMusic} />}
       {shown && showing === 'netease' && netease && <NeteaseWidget netease={netease} />}
+      {shown && showing === 'kugou' && kugou && <KugouWidget kugou={kugou} />}
       {shown && showing === 'player' && player && <PlayerWidget player={player} />}
       {shown && showing === 'radio' && radio && <RadioWidget radio={radio} />}
       {shown && showing === null && <MusicWidget source={null} artwork={null} onControl={() => {}} />}
@@ -133,6 +142,28 @@ function NeteaseWidget({ netease }: { netease: NonNullable<ReturnType<typeof use
         if (action === 'playPause') playOrPauseNetease()
         else if (action === 'next') skipNetease(1)
         else if (action === 'previous') skipNetease(-1)
+      }}
+    />
+  )
+}
+
+/** KuGou Music's (its own player in the cabin page): what plays, its cover and volume, its three buttons, and the
+ * words — the same card NetEase's gets. */
+function KugouWidget({ kugou }: { kugou: NonNullable<ReturnType<typeof useKuGouSource>> }) {
+  return (
+    <MusicWidget
+      source={kugou.source}
+      artwork={kugou.artwork}
+      onOpen={() => {
+        useKuGou.setState({ nowOpen: true, wordsOpen: false })
+        go({ type: 'openApp', app: 'kugou' })
+      }}
+      volume={useKuGou((state) => state.volume)}
+      onVolume={(level) => setKugouVolume(level)}
+      onControl={(action) => {
+        if (action === 'playPause') playOrPauseKugou()
+        else if (action === 'next') skipKugou(1)
+        else if (action === 'previous') skipKugou(-1)
       }}
     />
   )

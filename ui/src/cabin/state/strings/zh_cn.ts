@@ -128,7 +128,7 @@ export const strings: Strings = {
   weather: { clear: '晴', rain: '雨' },
   weatherTurning: { clear: '转晴', rain: '开始下雨' },
   youtube: {
-    search: '搜索',
+    search: '搜索你感兴趣的视频',
     continueWatching: '继续观看',
     recentSearches: '最近搜索',
     chips: [

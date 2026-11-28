@@ -1281,6 +1281,17 @@ fn create_environment(user_data: &Path, autoplay: bool) -> Result<ICoreWebView2E
             log!("[debug] the pages' remote debugging is on, port {port} ({name})");
         }
     }
+    // 2026-11-27：B 站的视频有声音、没有画面（番剧、普通视频都一样）。页面的字都在，只有视频那块黑：
+    // 视频被 Chromium 提升成独立的视频叠加层，由 DWM 单独合成，Windows.Graphics.Capture 抓的这个视觉
+    // （capture.rs `CreateFromVisual`）里没有那一层。让 B 站这一页整页在软件合成里画（视频也在 CPU 上
+    // 解码），所有层都落在 WebView2 自己的表面上，抓得到（owner 2026-11-27: 番剧没画面 / 所有视频没画面）。
+    if user_data
+        .file_name()
+        .and_then(|it| it.to_str())
+        .is_some_and(|name| name.contains("bilibili"))
+    {
+        arguments.push_str(" --disable-gpu-compositing --disable-accelerated-video-decode");
+    }
     // SAFETY: the options object is ours and alive; the arguments are a plain string.
     unsafe {
         options.set_additional_browser_arguments(arguments);

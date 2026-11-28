@@ -29,6 +29,7 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import kugou
 from .api import Client, NeteaseError
 
 # The account, as this layer holds it. One at a time, like a phone's own player.
@@ -207,6 +208,50 @@ class Handler(BaseHTTPRequestHandler):
         code = getattr(error, "code", None)
         self._send({"error": str(error), "code": code}, status)
 
+    def _kugou_url(self, hash_: str, album: str, name: str) -> dict:
+        """Where a KuGou song's audio is, through this layer's own stream route.
+
+        The page is on `https://westplay.cabin` and KuGou's CDN is plain `http`, which a browser refuses
+        from a secure page; the layer is on the loopback (which that page may reach), so the audio is
+        played through it. `code` 0 means playable, -1 that the service keeps it for its paid listeners.
+        """
+        found = kugou.audio(hash_, album)
+        if not found.get("url"):
+            return {
+                "url": "",
+                "bitrate": found.get("bitrate") or 0,
+                "size": 0,
+                "code": -1,
+                "reason": found.get("reason") or "本次请求需要验证",
+            }
+        port = self.server.server_address[1]
+        quoted = urllib.parse.quote(found["url"], safe="")
+        return {
+            "url": f"http://127.0.0.1:{port}/kugou/stream?u={quoted}",
+            "direct": found["url"],
+            "bitrate": found.get("bitrate") or 0,
+            "size": found.get("size") or 0,
+            "code": 0,
+            "name": name,
+        }
+
+    def _kugou_stream(self, url: str) -> None:
+        """A song's audio: the upstream's own bytes, ranges and all (the page's `<audio>` seeks with them)."""
+        status, headers, stream = kugou.open_stream(url, self.headers.get("Range") or "")
+        try:
+            body = stream.read()
+        finally:
+            stream.close()
+        self.send_response(status)
+        self.send_header("Content-Type", headers.get("Content-Type") or "audio/mpeg")
+        self.send_header("Content-Length", str(len(body)))
+        if headers.get("Content-Range"):
+            self.send_header("Content-Range", headers["Content-Range"])
+        self.send_header("Accept-Ranges", headers.get("Accept-Ranges") or "bytes")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self) -> None:  # noqa: N802 - the base class's name
         self._send({})
 
@@ -307,6 +352,56 @@ class Handler(BaseHTTPRequestHandler):
                     _state["nickname"] = ""
                     _state["userId"] = 0
                 return self._send({"ok": True})
+
+            # KuGou Music, in this same layer (`kugou.py`): the app's own routes, the same shapes.
+            if path == "/kugou/health":
+                return self._send({"ok": True, **kugou.account_public()})
+            if path == "/kugou/qr":
+                return self._send(kugou.qr_start())
+            if path == "/kugou/qr/check":
+                return self._send(kugou.qr_state(one("key")))
+            if path == "/kugou/signout":
+                kugou.forget()
+                return self._send({"ok": True})
+            if path == "/kugou/audiobook/tags":
+                return self._send(kugou.audiobook_tags())
+            if path == "/kugou/audiobooks":
+                return self._send(
+                    kugou.audiobooks(one("tag", "906"), number("gender"), number("sort"), number("status"), number("page", 1), number("size", 20))
+                )
+            if path == "/kugou/audiobook":
+                return self._send(kugou.audiobook(one("id")))
+            if path == "/kugou/audiobook/chapters":
+                return self._send(
+                    kugou.audiobook_chapters(one("id"), one("name"), one("cover"), number("page", 1), number("size", 30))
+                )
+            if path == "/kugou/favorites":
+                if not kugou.signed_in():
+                    # Not a failure: the page shows the QR itself when it hears "signin".
+                    return self._send({"playlists": [], "more": False, "note": "signin"})
+                return self._send(kugou.favourites(number("page", 1), number("size", 30)))
+            if path == "/kugou/search":
+                return self._send(kugou.search(one("q"), number("page", 1), number("size", 20)))
+            if path == "/kugou/ranks":
+                return self._send(kugou.ranks())
+            if path == "/kugou/rank":
+                return self._send(kugou.rank_songs(one("id"), number("page", 1), number("size", 30)))
+            if path == "/kugou/playlists":
+                return self._send(kugou.playlists(number("page", 1), number("size", 12)))
+            if path == "/kugou/playlist":
+                return self._send(kugou.playlist_songs(one("id"), number("page", 1), number("size", 30)))
+            if path == "/kugou/singers":
+                return self._send(kugou.singers(number("page", 1), number("size", 20)))
+            if path == "/kugou/singer":
+                return self._send(kugou.singer_songs(one("id"), number("page", 1), number("size", 30)))
+            if path == "/kugou/lyric":
+                return self._send(
+                    kugou.lyric(one("hash"), number("duration", 0), one("name"), one("artist"))
+                )
+            if path == "/kugou/url":
+                return self._send(self._kugou_url(one("hash"), one("album"), one("name")))
+            if path == "/kugou/stream":
+                return self._kugou_stream(one("u"))
             return self._send({"error": "no such route", "path": path}, 404)
         except NeteaseError as error:
             return self._fail(error)

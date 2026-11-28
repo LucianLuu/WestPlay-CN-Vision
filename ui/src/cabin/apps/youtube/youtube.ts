@@ -12,7 +12,7 @@ import {
 } from '../../../shared/host'
 import { whenTransitionEnds } from '../../state/launch'
 import { type Account, keptAccount } from './account'
-import { follow, type Loading } from './follow'
+import { follow, isSeason, type Loading, sameVideo } from './follow'
 import { previewAnswer } from './preview'
 
 /**
@@ -36,6 +36,13 @@ interface YouTubeStore {
   states: Record<'youtube' | 'bilibili', { state: YouTubeState | null; at: number }>
   /** The video opened last (shown before YouTube's player has it, and after). */
   current: YouTubeVideo | null
+  /**
+   * The ids the page itself reports for the video open: Bilibili's season pages play one of their episodes
+   * (`ss47836` opens `ep830494`), and the page reports the node it plays. Kept so what plays can be told
+   * from what was asked for (owner 2026-11-26: "番剧的视频无法加载" — the app asked for `ss47836`, was told
+   * about `ep830494`, took them for different videos and left the screen black).
+   */
+  playingAs: string | null
   /** Which site `current` is from: YouTube's, or Bilibili's over the same shell (`setSite`). What draws a
    * video outside the app (the Dashboard's Now Playing) tells them apart by it: Bilibili's gets its cover and
    * title on a card, YouTube's is cut open for its picture. */
@@ -50,7 +57,7 @@ interface YouTubeStore {
   views: View[]
   /** Bilibili's own section showing (its rail's): its front page, its ranking, its series. YouTube has none
    * (`home` kept for it). */
-  section: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'live'
+  section: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film'
   /** Bilibili's own dark page (its rail's moon): the app's surface only, the truck's appearance untouched. */
   dark: boolean
   /** Which of Bilibili's own pages beside its rail shows: the player's own (their avatar), their messages, or
@@ -139,6 +146,7 @@ export const useYouTube = create<YouTubeStore>()(
         bilibili: { state: null, at: 0 },
       },
       current: null,
+      playingAs: null,
       videoSite: 'youtube',
       open: false,
       returnToPlayer: false,
@@ -231,10 +239,12 @@ const waiting = new Map<number, (answer: YouTubeAnswer) => void>()
 const ANSWER_MS = 20_000
 
 export type Question =
-  | { action: 'search'; query: string; more?: string; filter?: 'channels' | 'playlists' }
+  | { action: 'search'; query: string; more?: string; filter?: 'channels' | 'playlists' | 'bangumi' | 'film' }
   | { action: 'suggest'; query: string }
   | { action: 'related'; video: string }
-  | { action: 'feed'; which: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'subscriptions' | 'live'; more?: string }
+  | { action: 'feed'; which: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'subscriptions'; more?: string }
+  | { action: 'sections'; which: 'bangumi' | 'film' }
+  | { action: 'shelf'; row: string; film?: boolean; more?: string }
   | { action: 'channel'; channel: string; more?: string }
   | { action: 'subscribe'; channel: string; on: boolean }
   | { action: 'playlist'; playlist: string; more?: string }
@@ -247,15 +257,16 @@ export type Question =
   | { action: 'danmaku'; video: string; part?: number }
   | { action: 'sendDanmaku'; video: string; text: string; at: number; part?: number }
 
-/** What a search shows: everything, or (YouTube's filters) channels or playlists only. */
-export type SearchFilter = 'all' | 'channels' | 'playlists'
+/** What a search shows: everything, channels or playlists only, or (Bilibili's own tabs) series or films only. */
+export type SearchFilter = 'all' | 'channels' | 'playlists' | 'bangumi' | 'film'
 
 /** A page the app has open over Home: a search's results, a channel's or a playlist's (what's known of it so
- * far: at least its id and name). `id`: a new page each time. */
+ * far: at least its id and name), or one row of a series page, all of it. `id`: a new page each time. */
 export type View =
   | { kind: 'results'; query: string; filter: SearchFilter; id: number }
   | { kind: 'channel'; channel: Pick<YouTubeChannel, 'channel' | 'name'> & Partial<YouTubeChannel>; id: number }
   | { kind: 'playlist'; playlist: KnownPlaylist; id: number }
+  | { kind: 'shelf'; title: string; row: string; film: boolean; id: number }
 
 /** What's known of a playlist before its page answers. */
 export type KnownPlaylist = Pick<YouTubePlaylist, 'playlist' | 'title'> & Partial<YouTubePlaylist>
@@ -281,8 +292,13 @@ export function openChannel(channel: View & { kind: 'channel' } extends { channe
   useYouTube.setState((store) => ({ views: [...store.views, { kind: 'channel', channel, id: ++views }] }))
 }
 
+/** One row of a series page, all of it (its 查看更多), over what's open. */
+export function openShelf(title: string, row: string, film: boolean): void {
+  useYouTube.setState((store) => ({ views: [...store.views, { kind: 'shelf', title, row, film, id: ++views }] }))
+}
+
 /** Bilibili's rail: which of its sections shows (its pages closed, so the section's own list is it). */
-export function setSection(section: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film' | 'live'): void {
+export function setSection(section: 'home' | 'selected' | 'ranking' | 'bangumi' | 'film'): void {
   useYouTube.setState({ section, views: [], page: null })
 }
 
@@ -353,9 +369,17 @@ export function receiveState(state: YouTubeState | null, from: 'youtube' | 'bili
   if (!here) return
 
   const { current: shown, open } = useYouTube.getState()
+  // What the page calls the video it plays (`ss…` asked for, `ep…` reported): kept before the follow
+  // replaces the ask, so the player's own test of what it shows tells them from another video.
+  const asked = loading
   const followed = follow(shown?.video ?? null, state?.video ?? null, loading, now)
   loading = followed.loading
-  if (followed.shown === 'clear') useYouTube.setState({ current: null, open: false, upNext: null, queue: null })
+  if (state?.video && shown && sameVideo({ video: shown.video, at: 0, also: asked?.also }, state.video)) {
+    useYouTube.setState({ playingAs: state.video })
+  }
+  if (followed.shown === 'clear') {
+    useYouTube.setState({ current: null, open: false, upNext: null, queue: null, playingAs: null })
+  }
   if (followed.shown === 'restore' && state?.video) restore(state)
   // The page (re)loaded with YouTube running: its picture is under the page until something shows it.
   if (state && !reported && !open) command({ action: 'hide' })
@@ -459,6 +483,8 @@ export function play(video: YouTubeVideo, fullScreen = true, queue?: Queue): voi
     ].slice(0, WATCHED_KEPT),
   }))
   loading = { video: video.video, at: performance.now() }
+  // What the page may call it instead (a season's own episode): it reports the node it plays.
+  useYouTube.setState({ playingAs: null })
   // The player's own volume, captions and quality first: no video starts at YouTube's.
   const { captions, quality, rate } = useYouTube.getState()
   command({ action: 'volume', percent: heard() })
@@ -477,6 +503,30 @@ export function play(video: YouTubeVideo, fullScreen = true, queue?: Queue): voi
 export function playPart(video: YouTubeVideo, part: number): void {
   useYouTube.setState({ part })
   command({ action: 'load', video: video.video, part })
+}
+
+/**
+ * Plays one of a series' episodes (its 选集 lists them by their own id, `ep830494`): the page goes to that
+ * episode's own address, which is what Bilibili plays it by. The part's number is kept for the list's own
+ * marker, and the video shown is the season the app listed (its title, cover and numbers stay the season's).
+ */
+export function playEpisode(episode: string, part: number): void {
+  useYouTube.setState((store) => ({
+    part,
+    // The one playing, for the list to light (the page reports the same id back once it's there).
+    playingAs: episode,
+    current: store.current && { ...store.current },
+  }))
+  // Bilibili's episode page answers with its season once it knows which one plays (`ss47836` for
+  // `ep830494`, see `bilibili.js` `current()`): told here, so waiting for this episode ends on a report of
+  // the season it belongs to rather than on one of another season's.
+  const season = useYouTube.getState().current?.video
+  loading = {
+    video: episode,
+    at: performance.now(),
+    also: season && isSeason(season) ? [season] : undefined,
+  }
+  command({ action: 'load', video: episode })
 }
 
 /** The playlist's next videos, asked for as it nears the end of those it has. */

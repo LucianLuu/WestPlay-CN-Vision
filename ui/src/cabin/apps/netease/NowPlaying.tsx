@@ -478,8 +478,11 @@ const HELD = 4000
  * against the scroller's own content, and half the scroller's seen height taken off it, so it lands in the
  * middle whatever the card's size (a coach's short screen, a wide one). The column's blank first and last
  * stretches (`::before`/`::after`) give the first and last lines the same room, so even they can reach it.
+ *
+ * Exported for KuGou's app (`apps/kugou`): it is the one words page both music apps show, so the words read
+ * the same whichever service the song came from.
  */
-function LyricLines({ words, position, onSeek }: { words: Words; position: number; onSeek(seconds: number): void }) {
+export function LyricLines({ words, position, onSeek }: { words: Words; position: number; onSeek(seconds: number): void }) {
   const box = useRef<HTMLDivElement>(null)
   const held = useRef(0)
   const first = useRef(true)

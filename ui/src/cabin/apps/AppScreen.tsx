@@ -7,6 +7,7 @@ import { CalendarApp } from './calendar/CalendarApp'
 import { useLanguage, useText } from '../state/text'
 import { isCopied, noteOpened, openedBefore, saveCopy, savedCopy } from './launchCopies'
 import { MusicApp } from './music/MusicApp'
+import { KugouApp } from './kugou/KugouApp'
 import { NeteaseApp } from './netease/NeteaseApp'
 import { QqApp } from './qq/QqApp'
 import { PlayerApp } from './player/PlayerApp'
@@ -104,7 +105,10 @@ function AppContent({ app }: { app: AppId }) {
     case 'douyin':
       return <WebApp site="douyin" />
     case 'kugou':
-      return <WebApp site="kugou" />
+      // KuGou Music, drawn by the page itself (`apps/kugou`): NetEase's own pattern — a self-drawn app over
+      // the local layer (the same layer's kugou routes), its player this page's own `Audio`, its words NetEase's
+      // words page. It stood as the site in the host's WebView before.
+      return <KugouApp />
     // The truck's own condition, from the game's telemetry.
     case 'vehicle':
       return <VehicleApp />

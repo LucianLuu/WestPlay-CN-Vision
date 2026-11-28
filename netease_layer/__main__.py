@@ -19,7 +19,7 @@ import signal
 import sys
 import threading
 
-from . import server
+from . import kugou, server
 
 # Where the account's cookie is kept between runs, under the state folder WestPlay gives.
 STATE_FILE = "netease-account.json"
@@ -90,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     folder = _state_folder(args.state)
     _load(folder)
     _save_forever(folder)
+    # KuGou's own account (its token), kept in the same folder the NetEase one is.
+    kugou.configure(str(folder))
 
     try:
         instance = server.serve(args.port)

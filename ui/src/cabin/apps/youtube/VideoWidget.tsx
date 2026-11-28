@@ -3,6 +3,7 @@ import { go } from '../../state/store'
 import { useText } from '../../state/text'
 import { FullScreenGlyph, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from './glyphs'
 import { OverVideo, VideoHole } from './VideoHole'
+import { sameVideo } from './follow'
 import { comingUp, command, nextVideo, play, positionNow, previousVideo, useYouTube } from './youtube'
 
 /** How long the controls stay after the last press, ms. */
@@ -15,11 +16,13 @@ const CONTROLS_MS = 3000
 export function VideoWidget() {
   const text = useText()
   const current = useYouTube((store) => store.current)
-  // What the player showing this video said — its own site's state, not whichever spoke last.
   const videoSite = useYouTube((store) => store.videoSite)
-  const playing = useYouTube(
-    (store) => store.states[store.videoSite].state?.state === 1 && store.states[store.videoSite].state?.video === store.current?.video,
-  )
+  // What the player showing this video said — its own site's state, not whichever spoke last. The page  // may report a season's own episode where the app listed the season (`follow.ts` `sameVideo`).
+  const playing = useYouTube((store) => {
+    const state = store.states[store.videoSite].state
+    if (!state || !store.current) return false
+    return state.state === 1 && sameVideo({ video: store.current.video, at: 0 }, state.video ?? '')
+  })
   const hasNext = useYouTube((store) => comingUp(store).length > 0)
   const [controls, setControls] = useState(false)
   const [touched, setTouched] = useState(0)

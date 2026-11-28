@@ -168,6 +168,24 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         more: Option<String>,
     },
+    /// A series page's rows (追番 or 影视): the player's own keeps first (wide, a season each), then
+    /// Bilibili's own recommendations.
+    Sections {
+        id: u32,
+        which: Feed,
+    },
+    /// One row of a series page, all of it (a row's 查看更多, or 我的追番): the player's own keeps (`row` `my`),
+    /// or one of Bilibili's own catalogues (`row` `bangumi`, `guochuang`, `hot`, `movie`), a page at a time
+    /// (`more`: the page its last answer gave).
+    Shelf {
+        id: u32,
+        row: String,
+        /// The player's own keeps are films' (`my` only): 影视's, not 番剧's.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        film: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        more: Option<String>,
+    },
     /// The signed-in player's own page (the app's 我的): their picture, their level, their coins and their
     /// numbers.
     Profile {
@@ -241,6 +259,10 @@ pub enum Command {
 pub enum SearchFilter {
     Channels,
     Playlists,
+    /// Series only (Bilibili's own 番剧 tab of a search).
+    Bangumi,
+    /// Films and dramas only (its 影视 tab).
+    Film,
 }
 
 /// A signed-in player's feed.
@@ -259,8 +281,6 @@ pub enum Feed {
     Subscriptions,
     /// Bilibili's own selection for the player (its 精选: what it puts first of everything).
     Selected,
-    /// Its live rooms (直播): each a room to watch in its own page.
-    Live,
 }
 
 /// Which of the player's messages a page asks for (its 消息 page's tabs).
@@ -301,6 +321,18 @@ pub enum Sort {
 }
 
 impl Command {
+    /// Whether this command must **reach** the page, not merely be posted to it.
+    ///
+    /// A posted message (`PostWebMessageAsJson`) lands in the page's document only while the listener the
+    /// startup script added is up, and Bilibili's page is a single-page app whose router swaps its document:
+    /// the listener goes with the old one, and the message is dropped without a trace (measured here
+    /// 2026-11-25, and the app's own log showed a room never navigated to — owner 2026-11-26: "直播还是没法
+    /// 播放"). These are the commands whose loss changes what the player does: the video to play, and how it
+    /// plays. They go by `ExecuteScript` instead, which targets whatever document is current.
+    fn must_arrive(&self) -> bool {
+        matches!(self, Command::Load { .. } | Command::Play | Command::Pause | Command::Seek { .. })
+    }
+
     /// Whether it's a command Bilibili's page can take: a video id that is one, text of a sensible length.
     fn is_sound(&self) -> bool {
         let text = |text: &str| text.chars().count() <= 200;
@@ -311,6 +343,7 @@ impl Command {
             Command::Language { code } => crate::is_language_tag(code),
             Command::Search { query, more, .. } => text(query) && more.as_deref().is_none_or(is_token),
             Command::Feed { more, .. } => more.as_deref().is_none_or(is_token),
+            Command::Shelf { more, .. } => more.as_deref().is_none_or(is_token),
             Command::Dynamics { more, .. } | Command::Library { more, .. } => more.as_deref().is_none_or(is_token),
             Command::Comments { video, more, .. } => is_video_id(video) && more.as_deref().is_none_or(is_token),
             Command::Danmaku { video, .. } => is_video_id(video),
@@ -561,6 +594,9 @@ pub struct Answer {
     pub answer: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub videos: Option<Vec<Video>>,
+    /// The rows of a series page (追番 or 影视): the player's keeps, then Bilibili's recommendations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sections: Option<Vec<Section>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub more: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -603,6 +639,20 @@ pub struct Answer {
     pub sent: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub failed: bool,
+}
+
+/// One row of a series page (追番 or 影视): its title, its seasons, and whether they're wide (a keep of the
+/// player's, its cover 16:9) or posters (Bilibili's recommendations).
+#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct Section {
+    pub title: String,
+    /// Which row it is (`my`, `bangumi`, `guochuang`, `hot`, `movie`): its 查看更多 asks for all of it.
+    #[serde(default)]
+    pub row: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wide: bool,
+    #[serde(default)]
+    pub items: Vec<Video>,
 }
 
 /// The signed-in player's own page: who they are, their level and their membership, their B coins and their
@@ -847,6 +897,9 @@ pub struct Video {
     /// When it was watched or kept ("今天 15:19"), on the player's own lists (absent elsewhere).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub at: String,
+    /// Bilibili's own mark on a season ("全13话", "会员专享"), on a series page's cards (absent elsewhere).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub badge: String,
 }
 
 impl Answer {
@@ -863,6 +916,7 @@ impl Answer {
                 for text in [&mut video.duration, &mut video.views, &mut video.age, &mut video.at] {
                     cut(text, 40);
                 }
+                cut(&mut video.badge, 40);
                 for image in [&mut video.avatar, &mut video.thumbnail] {
                     if image.as_deref().is_some_and(|url| !is_bilibili_image(url)) {
                         *image = None;
@@ -870,6 +924,30 @@ impl Answer {
                 }
                 if video.channel_id.as_deref().is_some_and(|id| !is_channel_id(id)) {
                     video.channel_id = None;
+                }
+            }
+        }
+        if let Some(sections) = &mut self.sections {
+            sections.truncate(6);
+            for section in sections {
+                cut(&mut section.title, 40);
+                cut(&mut section.row, 20);
+                section.items.retain(|video| is_video_id(&video.video));
+                section.items.truncate(30);
+                for video in &mut section.items {
+                    cut(&mut video.title, 200);
+                    cut(&mut video.channel, 100);
+                    for text in [&mut video.duration, &mut video.views, &mut video.age, &mut video.at, &mut video.badge] {
+                        cut(text, 40);
+                    }
+                    for image in [&mut video.avatar, &mut video.thumbnail] {
+                        if image.as_deref().is_some_and(|url| !is_bilibili_image(url)) {
+                            *image = None;
+                        }
+                    }
+                    if video.channel_id.as_deref().is_some_and(|id| !is_channel_id(id)) {
+                        video.channel_id = None;
+                    }
                 }
             }
         }
@@ -1193,6 +1271,9 @@ impl Bilibili {
                 if width * 2 < page.0 {
                     self.view.fit(page, x, y, width, height)?;
                 } else {
+                    // 2026-11-27：番剧没画面时，这行说明画面的位置与大小已经按页面铺好了，问题就只在抓帧
+                    // 那一侧（capture.rs）：声音不走抓帧，所以有声音、没有画面（owner 2026-11-27: 番剧没画面）。
+                    log!("[bilibili] the picture at {x}, {y}, {width}x{height} of the page {page:?}");
                     self.view.place(x, y, width, height)?;
                 }
                 self.view.show(true)
@@ -1219,6 +1300,8 @@ impl Bilibili {
                 self.reload()
             }
             command if !command.is_sound() => Ok(()),
+            // What the page must hear is run **in it** rather than posted to it (see [`Command::must_arrive`]).
+            command if command.must_arrive() => self.pass_script(command),
             _ => self.pass(command),
         }
     }
@@ -1275,11 +1358,20 @@ impl Bilibili {
     /// same as a posted one.
     fn pass_script(&self, command: &Command) -> windows::core::Result<()> {
         let message = serde_json::to_string(command).expect("commands serialise");
+        self.run_in_page(&message)
+    }
+
+    /// Runs one of the page's messages **in the page's current document** (`window.westplayRun`), the JSON
+    /// given as it would have been posted.
+    ///
+    /// `ExecuteScript` targets whatever document is current, which is what makes this reliable where
+    /// `PostWebMessageAsJson` is not (see [`Bilibili::pass_script`]).
+    fn run_in_page(&self, message: &str) -> windows::core::Result<()> {
         // The page's `run` is the one `postMessage` would have called; the JSON is embedded as a
         // literal (`JSON.parse` of a quoted string, so nothing in it can end the script).
         let script = format!(
             "window.westplayRun && window.westplayRun({});",
-            serde_json::to_string(&message).expect("a string is JSON")
+            serde_json::to_string(message).expect("a string is JSON")
         );
         self.view.run_script(&script, |_| ())
     }
@@ -1327,8 +1419,13 @@ impl Bilibili {
         }
         for message in self.view.take_page_messages() {
             if message == r#"{"ready":true}"# {
+                // What the page is owed is run **in it**, not posted: this is the page's own new document
+                // saying it's there, and a posted message lands in it only if the document's
+                // `chrome.webview` listener happens to be up — the very thing this page keeps losing as its
+                // single-page app swaps documents (owner 2026-11-25/26). A `load` posted and lost is a video
+                // the app asked for that the page never heard of ("直播还是没法播放", owner 2026-11-26).
                 for owed in self.outbox.borrow_mut().ready() {
-                    let _ = self.view.post_json(&owed);
+                    let _ = self.run_in_page(&owed);
                 }
             } else if let Some(bars) = speakers::read_spectrum(&message) {
                 reports.push(Report::Spectrum(bars));
@@ -1471,9 +1568,10 @@ pub(crate) fn within(
 /// A Bilibili video id: 11 characters of letters, digits, `-` and `_`.
 pub(crate) fn is_video_id(id: &str) -> bool {
     // A BV number: `BV` and ten characters of Bilibili's own alphabet. A season (`ss` and its id) is a
-    // series' own page, and `ep` an episode's: both open in Bilibili's, rather than a video's watch page. A
-    // live room (`lv` and its id) is the same: its own page, where its stream plays.
-    for prefix in ["ss", "ep", "lv"] {
+    // series' own page, and `ep` an episode's: both open in Bilibili's, rather than a video's watch page.
+    // A live room (`lv`) is not one of these any more: rooms were taken out of WestPlay (owner 2026-11-26),
+    // so a room's id is refused rather than passed on.
+    for prefix in ["ss", "ep"] {
         if let Some(rest) = id.strip_prefix(prefix) {
             return !rest.is_empty() && rest.len() <= 12 && rest.bytes().all(|b| b.is_ascii_digit());
         }
@@ -1512,6 +1610,21 @@ pub fn answer_message(answer: &Answer) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_commands_that_must_reach_the_page_are_run_in_it() {
+        // A posted one is dropped when the page's router swaps its document (the listener goes with the old
+        // one), which is how a live room was never navigated to (owner 2026-11-26: "直播还是没法播放").
+        assert!(Command::Load { video: "lv6".into(), start: None, part: None }.must_arrive());
+        assert!(Command::Play.must_arrive());
+        assert!(Command::Pause.must_arrive());
+        assert!(Command::Seek { seconds: 3.0 }.must_arrive());
+        // The rest may be posted: a lost volume or caption setting is applied by the next `ready` anyway.
+        assert!(!Command::Volume { percent: 40 }.must_arrive());
+        assert!(!Command::Close.must_arrive());
+        assert!(!Command::Hide.must_arrive());
+        assert!(!Command::Quality { quality: "auto".into() }.must_arrive());
+    }
 
     #[test]
     fn reads_the_pages_commands() {
@@ -1558,10 +1671,8 @@ mod tests {
             read(r#"{"action":"feed","id":11,"which":"selected"}"#),
             Some(Command::Feed { id: 11, which: Feed::Selected, more: None })
         );
-        assert_eq!(
-            read(r#"{"action":"feed","id":13,"which":"live"}"#),
-            Some(Command::Feed { id: 13, which: Feed::Live, more: None })
-        );
+        // A feed of live rooms is no longer one the app can ask for: rooms were taken out of WestPlay.
+        assert_eq!(read(r#"{"action":"feed","id":13,"which":"live"}"#), None);
         // A series' part: the 选集's own number, played on the video's page (`?p=2`).
         assert_eq!(
             read(r#"{"action":"load","video":"BV1GJ411x7h7","part":2}"#),
@@ -1680,8 +1791,10 @@ mod tests {
     #[test]
     fn plays_only_what_looks_like_a_video() {
         assert!(is_video_id("BV1GJ411x7h7") && is_video_id("BV1xx411c7mD"));
-        // A live room (直播), and a series' own pages, are pages of their own that play too.
-        assert!(is_video_id("lv123456") && is_video_id("ss47836") && is_video_id("ep123456"));
+        // A series' own pages are pages of their own that play too.
+        assert!(is_video_id("ss47836") && is_video_id("ep123456"));
+        // A live room is not one any more: rooms were taken out of WestPlay (owner 2026-11-26).
+        assert!(!is_video_id("lv123456"));
         assert!(!is_video_id("lv") && !is_video_id("dQw4w9WgXc") && !is_video_id("BV1GJ411x7h7'") && !is_video_id("');alert(1)//"));
     }
 

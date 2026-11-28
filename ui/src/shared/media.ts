@@ -11,6 +11,7 @@ export type MusicService =
   | 'player'
   | 'qqMusic'
   | 'netease'
+  | 'kugou'
   | 'radio'
   // Bilibili's video, on the same card the music apps get (cover, title, uploader).
   | 'bilibili'

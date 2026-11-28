@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { MediaSource } from '../../shared/media'
 import { command, useYouTube } from '../apps/youtube/youtube'
+import { sameVideo } from '../apps/youtube/follow'
 import { playOrPause, useSpotifySource } from '../apps/spotify/spotify'
 import { playOrPause as playOrPauseAppleMusic, useAppleMusicSource } from '../apps/music/appleMusic'
 import { playOrPause as playOrPauseYouTubeMusic, useYouTubeMusicSource } from '../apps/youtubeMusic/youtubeMusic'
@@ -9,6 +10,8 @@ import { playOrPause as playOrPausePlayer, usePlayerSource } from '../apps/playe
 import { playOrPauseRadio, useRadioSource } from '../apps/radio/radio'
 import { playOrPause as playOrPauseQqMusic, useQqMusicSource } from '../apps/qq/qqMusic'
 import { playOrPause as playOrPauseNetease, useNeteaseSource } from '../apps/netease/netease'
+import { playOrPause as playOrPauseKugou } from '../apps/kugou/pauseWithGame'
+import { useKuGouSource } from '../apps/kugou/kugou'
 import { type NowPlayingSource, shownSource } from './nowPlaying'
 
 /** What Now Playing last showed playing, kept while the screens showing it come and go (nowPlaying.ts). */
@@ -58,7 +61,8 @@ export function useBilibiliSource(): { source: MediaSource; artwork: string | nu
   const video = useYouTube((store) => (store.videoSite === 'bilibili' ? store.current : null))
   const held = useYouTube((store) => store.states.bilibili)
   if (!video) return null
-  const mine = held.state?.video === video.video ? held.state : null
+  const mine =
+    held.state && video && sameVideo({ video: video.video, at: 0 }, held.state.video ?? '') ? held.state : null
   const playing = mine?.state === 1
   return {
     artwork: video.thumbnail,
@@ -91,6 +95,7 @@ export function useNowPlaying() {
   const player = usePlayerSource()
   const qqMusic = useQqMusicSource()
   const netease = useNeteaseSource()
+  const kugou = useKuGouSource()
   const bilibili = useBilibiliSource()
   const radio = useRadioSource()
   const video = useYouTube((store) => store.current)
@@ -99,7 +104,8 @@ export function useNowPlaying() {
   // for YouTube's now.
   const bilibiliShown = bilibili !== null
   const videoState = useYouTube((store) => store.states.youtube.state)
-  const videoPlaying = videoState?.state === 1 && videoState.video === video?.video
+  const videoPlaying =
+    videoState?.state === 1 && video !== null && sameVideo({ video: video.video, at: 0 }, videoState.video ?? '')
   const playing = {
     video: video !== null && videoPlaying && !bilibiliShown,
     bilibili: bilibili?.source.status === 'playing',
@@ -109,6 +115,7 @@ export function useNowPlaying() {
     youtubeMusic: youtubeMusic?.source.status === 'playing',
     qqMusic: qqMusic?.source.status === 'playing',
     netease: netease?.source.status === 'playing',
+    kugou: kugou?.source.status === 'playing',
     player: player?.source.status === 'playing',
     radio: radio?.source.status === 'playing',
   }
@@ -121,6 +128,7 @@ export function useNowPlaying() {
     youtubeMusic: Boolean(youtubeMusic),
     qqMusic: Boolean(qqMusic),
     netease: Boolean(netease),
+    kugou: Boolean(kugou),
     player: Boolean(player),
     radio: Boolean(radio),
   }
@@ -129,7 +137,7 @@ export function useNowPlaying() {
   useEffect(() => {
     if (showing !== null && showingPlays) lastPlayed = showing
   }, [showing, showingPlays])
-  return { showing, playing, bilibili, webApp, spotify, appleMusic, youtubeMusic, qqMusic, netease, player, radio, video }
+  return { showing, playing, bilibili, webApp, spotify, appleMusic, youtubeMusic, qqMusic, netease, kugou, player, radio, video }
 }
 
 /** The track Now Playing shows, as one line of a list draws it (the Equalizer's): its title, who it's by, its
@@ -141,7 +149,7 @@ export function useNowPlayingTrack(): {
   playing: boolean
   playPause: (() => void) | null
 } | null {
-  const { showing, playing, webApp, spotify, appleMusic, youtubeMusic, qqMusic, netease, player, radio, video } =
+  const { showing, playing, webApp, spotify, appleMusic, youtubeMusic, qqMusic, netease, kugou, player, radio, video } =
     useNowPlaying()
   const music = (
     player: { source: { title: string; artist: string; controls: { playPause: boolean } }; artwork: string | null },
@@ -179,6 +187,9 @@ export function useNowPlayingTrack(): {
       // NetEase's app is the player itself (its own element in the cabin page), so this is the app's own
       // pause and play, not a page's.
       return netease ? music(netease, playOrPauseNetease, playing.netease) : null
+    case 'kugou':
+      // KuGou's app is the player itself (its own element in the cabin page): its own pause and play.
+      return kugou ? music(kugou, playOrPauseKugou, playing.kugou) : null
     case 'player':
       return player ? music(player, playOrPausePlayer, playing.player) : null
     case 'radio':

@@ -20,6 +20,7 @@ import {
   VolumeGlyph,
 } from './glyphs'
 import { Thumbnail } from './YouTubeApp'
+import { sameVideo } from './follow'
 import {
   ask,
   closePlayer,
@@ -31,6 +32,7 @@ import {
   nextVideo,
   openChannel,
   play,
+  playEpisode,
   playPart,
   previousVideo,
   QUALITIES,
@@ -109,6 +111,23 @@ function OpenPlayer() {
   // controls only while the pointer is on the picture (owner 2026-11-22).
   const [full, setFull] = useState(false)
   const [hover, setHover] = useState(false)
+  // How long the controls stay after the pointer's last move, ms: Bilibili's own player hides them while the
+  // picture plays and nothing is touched. `pointerleave` alone was not enough — the pointer can rest on the
+  // picture for good (and in the truck that is the usual case), so `hover` stayed true and the controls never
+  // went away, which in full screen left them drawn over the whole picture (owner 2026-11-26:
+  // 全屏状态下播放控件无法隐藏).
+  const HOVER_MS = 2600
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  /** Keeps the controls up for another while (a move, a press, a menu opened). */
+  const holdControls = () => {
+    setHover(true)
+    clearTimeout(hoverTimer.current)
+    hoverTimer.current = setTimeout(() => {
+      // A menu open over the picture is still being used: its own closing puts them away.
+      setHover((was) => (was ? false : was))
+    }, HOVER_MS)
+  }
+  useEffect(() => () => clearTimeout(hoverTimer.current), [])
   // Bilibili's page: its video on the left, its details (and Up next) beside it, its parts under them.
   const bilibili = currentSite() === 'bilibili'
   // Its player page is always dark (its client's own, and the owner's ask: "播放页默认深色"), even when the
@@ -135,7 +154,7 @@ function OpenPlayer() {
     const now = useYouTube.getState()
     const level = Math.round(Math.min(100, Math.max(0, (now.muted ? 0 : now.volume) + delta)))
     setVolume(level)
-    setHover(true)
+    holdControls()
     touch()
     setVolumeHint(level)
     clearTimeout(hintTimer.current)
@@ -189,7 +208,18 @@ function OpenPlayer() {
     }
   }, [bilibili, current?.video, dark, full])
 
-  const mine = state !== null && state.video === current?.video
+  // What the page reports may be the season's own episode rather than the season the app listed
+  // (`ss47836` played as `ep830494`): the two are one watch (follow.ts `sameVideo`), and reading them as
+  // two left this player with no state at all — no picture, no controls, the app's own stand-in over it.
+  const mine =
+    state !== null &&
+    state.video !== null &&
+    // B 站的页面自己说它在播什么：问它的是哪一集也好、哪一季也好，它答的是它那一页认的那一个（`ss47836`
+    // 问、`ep830494` 答，或反过来）。它的客户端只有一个画面，页面说的就是这一场；两个 id 对不上就当不是它，
+    // 封面便一直盖在正播着的页面上——那正是"有声音、没有画面"（owner 2026-11-27: 番剧没画面）。
+    (bilibili ||
+      state.video === current?.video ||
+      sameVideo({ video: current?.video ?? '', at: 0 }, state.video))
   // Started: it has played once (the cover goes for good).
   const [started, setStarted] = useState<string | null>(null)
   if (mine && state.state === 1 && started !== current?.video) setStarted(current?.video ?? null)
@@ -258,13 +288,13 @@ function OpenPlayer() {
               (Bilibili's own player), none of them drawn otherwise. */}
           <div
             className={hover || menu ? 'yt-stage shown' : 'yt-stage'}
-            onPointerMove={() => setHover(true)}
+            onPointerMove={holdControls}
             onPointerLeave={() => {
               if (!menu) setHover(false)
             }}
             onPointerDown={(event) => {
               if (event.target !== event.currentTarget) return
-              setHover(true)
+              holdControls()
               if (menu) {
                 setMenu(null)
                 return
@@ -314,7 +344,7 @@ function OpenPlayer() {
                   className="bili-icon play"
                   aria-label={playing ? text.pause : text.play}
                   onClick={() => {
-                    setHover(true)
+                    holdControls()
                     if (ended) command({ action: 'seek', seconds: 0 })
                     command({ action: playing ? 'pause' : 'play' })
                   }}
@@ -354,7 +384,7 @@ function OpenPlayer() {
                 >
                   <SettingsGlyph />
                 </button>
-                <Volume onTouch={() => setHover(true)} />
+                <Volume onTouch={holdControls} />
                 <button
                   type="button"
                   className="bili-icon"
@@ -362,7 +392,7 @@ function OpenPlayer() {
                   aria-pressed={full}
                   onClick={() => {
                     setFull(!full)
-                    setHover(true)
+                    holdControls()
                   }}
                 >
                   <FullScreenGlyph />
@@ -379,7 +409,7 @@ function OpenPlayer() {
           part={part}
           upNext={coming}
           onPlay={play}
-          onPart={(page) => playPart(current, page)}
+          onPart={(page, episode) => (episode ? playEpisode(episode, page) : playPart(current, page))}
         />
       </div>
     )
@@ -610,7 +640,7 @@ function BilibiliDetails({
   part: number
   upNext: YouTubeVideo[]
   onPlay(video: YouTubeVideo): void
-  onPart(page: number): void
+  onPart(page: number, episode?: string): void
 }) {
   const [detail, setDetail] = useState<YouTubeDetail | null>(null)
   const [failed, setFailed] = useState(false)
@@ -769,24 +799,41 @@ function BilibiliDetails({
               </div>
             )}
             <h2 className="bili-video-title">{video.title}</h2>
+            {/* A series' own line under its name, as its page has it: its score, and the season the
+                episodes belong to. */}
+            {detail?.score && (
+              <div className="bili-season-line">
+                <span className="bili-season-score">{detail.score}</span>
+                <span className="bili-season-label">分</span>
+              </div>
+            )}
             {detail?.desc && <p className="bili-desc">{detail.desc}</p>}
-            {/* A series' episodes: each its own part, the one playing lit. */}
+            {/* A series' episodes: each its own part, the one playing lit, as Bilibili's own 选集 lists them.
+                A part's own name comes first (its episode's title, "第一话 任务1"), its number beside it, and
+                its 会员 mark where only a paying account plays it (owner 2026-11-26: 分集要显示分集名字 —
+                the list showed bare numbers). */}
             {parts.length > 1 && (
               <div className="bili-parts">
                 <span className="bili-parts-title">{`选集 · ${parts.length}`}</span>
                 <div className="bili-parts-grid">
-                  {parts.map((one) => (
-                    <button
-                      key={one.cid}
-                      type="button"
-                      className={one.page === part ? 'bili-part on' : 'bili-part'}
-                      title={`${one.page}. ${one.title}`}
-                      aria-pressed={one.page === part}
-                      onClick={() => onPart(one.page)}
-                    >
-                      {one.page}
-                    </button>
-                  ))}
+                  {parts.map((one) => {
+                    const playingPart = one.playing || one.page === part
+                    return (
+                      <button
+                        key={one.episode ?? one.cid}
+                        type="button"
+                        className={playingPart ? 'bili-part on' : 'bili-part'}
+                        title={`${one.page}. ${one.title}${one.subtitle ? ` ${one.subtitle}` : ''}`}
+                        aria-pressed={playingPart}
+                        onClick={() => onPart(one.page, one.episode)}
+                      >
+                        <span className="bili-part-num">{one.page}</span>
+                        <span className="bili-part-name">{one.subtitle || one.title}</span>
+                        {one.subtitle && <span className="bili-part-sub">{one.title}</span>}
+                        {one.badge && <span className="bili-part-badge">{one.badge}</span>}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}

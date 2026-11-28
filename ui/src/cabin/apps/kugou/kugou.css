@@ -1,0 +1,1700 @@
+/* KuGou Music's app (KugouApp.tsx): the desktop client's look — a rail at the left, the tabs and the search over
+   the page, the entries in colour, 今日专属推荐's grid of covers, and the player at the foot. KuGou's own light
+   grey, its blue for what's on and what plays.
+
+   The look is the light one, as KuGou's client is; `.shell.appearance-dark` gives the dark values (KuGou's night
+   client: near-black ground, the same blue).
+
+   Every rule is scoped to the app (`.kg-app …`), so the cab's own defaults never come through. */
+
+.kg-app {
+  --kg-base: #fff;
+  --kg-rail: #f5f5f7;
+  --kg-rail-on: #fff;
+  --kg-raised: #f7f7fa;
+  --kg-line: rgb(0 0 0 / 0.07);
+  --kg-text: #1b1b1f;
+  --kg-dim: #74747e;
+  --kg-faint: rgb(0 0 0 / 0.36);
+  --kg-track: rgb(0 0 0 / 0.12);
+  --kg-blue: #2b7fff;
+  --kg-blue-soft: rgb(43 127 255 / 0.12);
+  --kg-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+
+  --kg-type-title: calc(44px * var(--text-scale, 1));
+  --kg-type-section: calc(37px * var(--text-scale, 1));
+  --kg-type-body: calc(27px * var(--text-scale, 1));
+  --kg-type-label: calc(23px * var(--text-scale, 1));
+  --kg-type-small: calc(19px * var(--text-scale, 1));
+  --kg-type-caption: calc(16px * var(--text-scale, 1));
+
+  --kg-corner: 10px;
+  --kg-corner-card: 12px;
+  --kg-rail-width: 252px;
+  --kg-foot-height: 94px;
+  --kg-ease: cubic-bezier(0.3, 0, 0, 1);
+  --kg-quick: 0.2s;
+
+  font-family: 'Figtree Variable', 'Instrument Sans Variable', 'Inter Variable', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  border-radius: var(--panel-radius);
+  background: var(--kg-base);
+  color: var(--kg-text);
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  container-type: size;
+  /* The words page is laid over the whole app, rail included (it is a child of this box, not of the column). */
+  position: relative;
+}
+
+.shell.appearance-dark .kg-app {
+  --kg-base: #17171a;
+  --kg-rail: #111114;
+  --kg-rail-on: #22222a;
+  --kg-raised: #202027;
+  --kg-line: rgb(255 255 255 / 0.09);
+  --kg-text: #f2f2f5;
+  --kg-dim: #9a9aa6;
+  --kg-faint: rgb(255 255 255 / 0.36);
+  --kg-track: rgb(255 255 255 / 0.16);
+  --kg-blue: #3d8cff;
+  --kg-blue-soft: rgb(61 140 255 / 0.18);
+  --kg-shadow: 0 6px 20px rgb(0 0 0 / 0.45);
+}
+
+.kg-app button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: start;
+}
+
+/* --- the rail ---------------------------------------------------------------------------------------------- */
+
+.kg-rail {
+  width: var(--kg-rail-width);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 12px 14px;
+  background: var(--kg-rail);
+  border-right: 1px solid var(--kg-line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.kg-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 14px;
+}
+
+.kg-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+}
+
+/* KuGou's own icon, as its app's tile: the blue circle with the white K. */
+.kg-brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.kg-brand-inline img {
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.kg-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.kg-brand-text strong {
+  font-size: var(--kg-type-label);
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.kg-brand-text small {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-faint);
+  letter-spacing: 0.04em;
+}
+
+.kg-brand-icon {
+  display: none;
+}
+
+.kg-rail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kg-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: var(--kg-type-body);
+  font-weight: 550;
+  color: var(--kg-dim);
+  transition: background var(--kg-quick) var(--kg-ease), color var(--kg-quick) var(--kg-ease);
+}
+
+.kg-rail-item:hover {
+  background: var(--kg-rail-on);
+  color: var(--kg-text);
+}
+
+.kg-rail-item.on {
+  background: var(--kg-rail-on);
+  color: var(--kg-blue);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+.kg-rail-glyph {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.kg-rail-rule {
+  height: 1px;
+  margin: 6px 6px;
+  background: var(--kg-line);
+}
+
+.kg-rail-note {
+  margin: auto 6px 0;
+  font-size: var(--kg-type-caption);
+  line-height: 1.5;
+  color: var(--kg-faint);
+}
+
+/* --- the page's column ------------------------------------------------------------------------------------- */
+
+.kg-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--kg-base);
+}
+
+.kg-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  flex: none;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--kg-line);
+}
+
+.kg-brand-inline,
+.kg-round {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.kg-round {
+  color: var(--kg-dim);
+  transition: background var(--kg-quick) var(--kg-ease), color var(--kg-quick) var(--kg-ease);
+}
+
+.kg-round:hover {
+  background: var(--kg-raised);
+  color: var(--kg-text);
+}
+
+.kg-brand-inline svg {
+  width: 30px;
+  height: 30px;
+}
+
+.kg-tabs {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: none;
+  transition: opacity var(--kg-quick) var(--kg-ease);
+}
+
+.kg-tab {
+  position: relative;
+  font-size: var(--kg-type-body);
+  font-weight: 550;
+  color: var(--kg-dim);
+  padding: 8px 2px;
+  white-space: nowrap;
+  transition: color var(--kg-quick) var(--kg-ease);
+}
+
+.kg-tab:hover {
+  color: var(--kg-text);
+}
+
+.kg-tab.on {
+  color: var(--kg-text);
+  font-weight: 750;
+}
+
+.kg-tab.on::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 18px;
+  height: 3px;
+  margin-left: -9px;
+  border-radius: 2px;
+  background: var(--kg-blue);
+}
+
+.kg-search {
+  margin-left: auto;
+  width: min(300px, 36%);
+  flex: none;
+}
+
+/* The cab's own field, sized for this bar (keyboard.css draws it). */
+.kg-search .text-field {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 19px;
+  background: var(--kg-raised);
+  color: var(--kg-text);
+  font-size: var(--kg-type-label);
+}
+
+.kg-search .text-field-text {
+  font-size: var(--kg-type-label);
+}
+
+.kg-search .text-field-hint {
+  color: var(--kg-faint);
+}
+
+.kg-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--kg-track) transparent;
+}
+
+.kg-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 22px 26px;
+}
+
+.kg-title {
+  margin: 0;
+  font-size: var(--kg-type-title);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.kg-sub {
+  margin: 4px 0 0;
+  font-size: var(--kg-type-small);
+  color: var(--kg-dim);
+}
+
+.kg-note {
+  margin: 10px 0;
+  font-size: var(--kg-type-small);
+  color: var(--kg-dim);
+}
+
+.kg-failed {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.kg-failed p {
+  margin: 0;
+  font-size: var(--kg-type-small);
+  color: var(--kg-dim);
+}
+
+.kg-failed button {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--kg-blue-soft);
+  color: var(--kg-blue);
+  font-size: var(--kg-type-small);
+  font-weight: 650;
+}
+
+/* --- the entries, as the client's colour cards --------------------------------------------------------------- */
+
+.kg-entries {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.kg-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 112px;
+  padding: 18px 20px;
+  border-radius: var(--kg-corner-card);
+  color: #fff;
+  overflow: hidden;
+  transition: transform var(--kg-quick) var(--kg-ease), filter var(--kg-quick) var(--kg-ease);
+}
+
+.kg-entry:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.kg-entry.tone-red {
+  background: linear-gradient(135deg, #ff5f6d, #ff3948);
+}
+
+.kg-entry.tone-amber {
+  background: linear-gradient(135deg, #ffb347, #ff8a2a);
+}
+
+.kg-entry.tone-blue {
+  background: linear-gradient(135deg, #4facff, #2b7fff);
+}
+
+.kg-entry.tone-green {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
+.kg-entry-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.22);
+  color: #fff;
+}
+
+.kg-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.kg-entry-text strong {
+  font-size: var(--kg-type-body);
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.kg-entry-text small {
+  font-size: var(--kg-type-caption);
+  color: rgb(255 255 255 / 0.72);
+  white-space: nowrap;
+}
+
+/* --- a section of covers ------------------------------------------------------------------------------------ */
+
+.kg-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kg-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kg-section-head h2 {
+  margin: 0;
+  font-size: var(--kg-type-section);
+  font-weight: 800;
+}
+
+.kg-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: var(--kg-type-small);
+  font-weight: 600;
+  color: var(--kg-dim);
+  transition: background var(--kg-quick) var(--kg-ease), color var(--kg-quick) var(--kg-ease);
+}
+
+.kg-more:hover {
+  background: var(--kg-raised);
+  color: var(--kg-blue);
+}
+
+.kg-more.wide {
+  width: 100%;
+  justify-content: center;
+  padding: 10px;
+  background: var(--kg-raised);
+  font-size: var(--kg-type-label);
+}
+
+.kg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: 20px 16px;
+}
+
+.kg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kg-card-cover {
+  position: relative;
+  aspect-ratio: 5 / 3;
+  border-radius: var(--kg-corner-card);
+  overflow: hidden;
+  background: var(--kg-raised);
+}
+
+.kg-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.5s var(--kg-ease);
+}
+
+.kg-card:hover .kg-card-cover img {
+  transform: scale(1.05);
+}
+
+.kg-card-tag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 84px);
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.4);
+  font-size: var(--kg-type-caption);
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kg-card-plays {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--kg-type-caption);
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.6);
+}
+
+.kg-card-plays svg {
+  width: 12px;
+  height: 12px;
+}
+
+.kg-card-name {
+  margin: 0;
+  font-size: var(--kg-type-small);
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kg-blank {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--kg-raised), var(--kg-rail));
+}
+
+/* No cover: the song's own first letter on the empty square, rather than a blank one. */
+.kg-blank-letter {
+  display: grid;
+  place-items: center;
+  font-size: var(--kg-type-label);
+  font-weight: 700;
+  color: var(--kg-faint);
+}
+
+/* --- the charts --------------------------------------------------------------------------------------------- */
+
+.kg-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
+  gap: 12px;
+}
+
+.kg-rank-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: var(--kg-corner-card);
+  background: var(--kg-raised);
+  transition: background var(--kg-quick) var(--kg-ease);
+}
+
+.kg-rank-card:hover {
+  background: var(--kg-blue-soft);
+}
+
+.kg-rank-cover {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: none;
+  border-radius: var(--kg-corner);
+  overflow: hidden;
+  background: var(--kg-rail);
+}
+
+.kg-rank-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kg-rank-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kg-rank-text strong {
+  font-size: var(--kg-type-label);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-rank-text small {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- the singers ------------------------------------------------------------------------------------------- */
+
+.kg-singer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 16px 12px;
+}
+
+.kg-singer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kg-singer-face {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--kg-raised);
+}
+
+.kg-singer-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kg-singer strong {
+  font-size: var(--kg-type-small);
+  font-weight: 650;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-singer small {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-faint);
+}
+
+/* --- a page's head and its rows ------------------------------------------------------------------------------ */
+
+.kg-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.kg-head-cover {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border-radius: var(--kg-corner-card);
+  overflow: hidden;
+  background: var(--kg-raised);
+  box-shadow: var(--kg-shadow);
+}
+
+.kg-head-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kg-head-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.kg-app .kg-play-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--kg-blue);
+  color: #fff;
+  font-size: var(--kg-type-small);
+  font-weight: 700;
+  transition: filter var(--kg-quick) var(--kg-ease);
+}
+
+.kg-app .kg-play-all:hover {
+  filter: brightness(1.08);
+}
+
+.kg-app .kg-play-all svg {
+  width: 18px;
+  height: 18px;
+}
+
+.kg-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kg-row {
+  border-radius: var(--kg-corner);
+  transition: background var(--kg-quick) var(--kg-ease);
+}
+
+.kg-row:hover {
+  background: var(--kg-raised);
+}
+
+.kg-row.now {
+  background: var(--kg-blue-soft);
+}
+
+.kg-row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: inherit;
+}
+
+.kg-row-num {
+  width: 26px;
+  flex: none;
+  text-align: center;
+  font-size: var(--kg-type-caption);
+  font-weight: 600;
+  color: var(--kg-faint);
+}
+
+.kg-row-cover {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--kg-raised);
+}
+
+.kg-row-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kg-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.kg-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--kg-type-label);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-vip {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #ffd166, #f2a93b);
+  color: #6a4300;
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 800;
+  font-style: normal;
+}
+
+.kg-row-artist {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-row-album {
+  width: 150px;
+  flex: none;
+  font-size: var(--kg-type-caption);
+  color: var(--kg-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-row-time {
+  width: 54px;
+  flex: none;
+  text-align: end;
+  font-size: var(--kg-type-caption);
+  color: var(--kg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.kg-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+
+.kg-eq i {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--kg-blue);
+  animation: kg-eq 0.9s ease-in-out infinite;
+}
+
+.kg-eq i:nth-child(1) {
+  height: 60%;
+  animation-delay: -0.3s;
+}
+
+.kg-eq i:nth-child(2) {
+  height: 100%;
+  animation-delay: -0.15s;
+}
+
+.kg-eq i:nth-child(3) {
+  height: 45%;
+}
+
+@keyframes kg-eq {
+  0%,
+  100% {
+    transform: scaleY(0.55);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.kg-page-foot {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px;
+}
+
+/* --- the foot's player --------------------------------------------------------------------------------------- */
+
+.kg-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: var(--kg-foot-height);
+  flex: none;
+  padding: 0 18px;
+  border-top: 1px solid var(--kg-line);
+  background: var(--kg-base);
+  transition: transform 0.3s var(--kg-ease), opacity 0.3s var(--kg-ease);
+}
+
+.kg-foot.away {
+  transform: translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kg-foot.empty {
+  justify-content: center;
+  color: var(--kg-faint);
+  font-size: var(--kg-type-caption);
+}
+
+.kg-foot.empty p {
+  margin: 0;
+}
+
+.kg-foot-song {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 210px;
+  flex: none;
+}
+
+.kg-foot-cover {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--kg-raised);
+}
+
+.kg-foot-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kg-foot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kg-foot-text strong {
+  font-size: var(--kg-type-label);
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-foot-text small {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-foot-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.kg-foot-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--kg-dim);
+}
+
+.kg-foot-button:hover {
+  color: var(--kg-text);
+}
+
+.kg-foot-play {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--kg-blue);
+  color: #fff;
+}
+
+.kg-foot-play:hover {
+  filter: brightness(1.08);
+}
+
+.kg-foot-play svg {
+  width: 20px;
+  height: 20px;
+}
+
+.kg-spin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 0.35);
+  border-top-color: #fff;
+  animation: kg-spin 0.8s linear infinite;
+}
+
+@keyframes kg-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.kg-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.kg-bar-time {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.kg-bar-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.kg-bar-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--kg-track);
+}
+
+.kg-bar-fill {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--kg-blue);
+  pointer-events: none;
+}
+
+.kg-bar-knob {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--kg-blue);
+  pointer-events: none;
+}
+
+.kg-foot-lyric {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--kg-dim);
+}
+
+.kg-foot-lyric:hover {
+  background: var(--kg-raised);
+  color: var(--kg-blue);
+}
+
+.kg-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--kg-foot-height) + 14px);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
+  font-size: var(--kg-type-small);
+  white-space: nowrap;
+  animation: kg-toast 0.25s var(--kg-ease);
+}
+
+@keyframes kg-toast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+/* --- the full player ----------------------------------------------------------------------------------------- */
+
+.kg-now {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow: hidden;
+  color: #fff;
+  animation: kg-now-in 0.3s var(--kg-ease);
+}
+
+@keyframes kg-now-in {
+  from {
+    opacity: 0;
+    transform: translateY(3%);
+  }
+}
+
+/* The cover, blurred and dark under everything: the words and the buttons need a ground. */
+.kg-now-backdrop {
+  position: absolute;
+  inset: -40px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(46px) saturate(1.5) brightness(0.5);
+  opacity: 0.9;
+}
+
+.kg-now-wash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 20% 20%, rgb(12 14 20 / 0.55), rgb(6 8 12 / 0.88) 70%);
+}
+
+.kg-now-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: rgb(255 255 255 / 0.7);
+  background: rgb(255 255 255 / 0.1);
+  transition: background var(--kg-quick) var(--kg-ease), color var(--kg-quick) var(--kg-ease);
+}
+
+.kg-now-close:hover {
+  background: rgb(255 255 255 / 0.18);
+  color: #fff;
+}
+
+.kg-now-left {
+  position: relative;
+  z-index: 1;
+  width: 42%;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 30px 26px;
+  min-width: 0;
+}
+
+.kg-now-cover {
+  position: relative;
+  width: min(280px, 68%);
+  aspect-ratio: 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.5);
+}
+
+.kg-now-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.kg-now-name {
+  margin: 8px 0 0;
+  font-size: var(--kg-type-title);
+  font-weight: 800;
+  text-align: center;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-now-artist {
+  margin: 0;
+  font-size: var(--kg-type-label);
+  color: rgb(255 255 255 / 0.72);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-now-album {
+  margin: 0;
+  font-size: var(--kg-type-caption);
+  color: rgb(255 255 255 / 0.46);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-now-bar {
+  width: 100%;
+  margin-top: 6px;
+  --kg-track: rgb(255 255 255 / 0.22);
+  --kg-faint: rgb(255 255 255 / 0.5);
+  --kg-blue: #7cc0ff;
+}
+
+.kg-now-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 4px;
+}
+
+.kg-now-button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  color: rgb(255 255 255 / 0.76);
+}
+
+.kg-now-button:hover {
+  color: #fff;
+}
+
+.kg-now-play {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #fff;
+  color: #12141a;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.35);
+}
+
+.kg-now-play svg {
+  width: 28px;
+  height: 28px;
+}
+
+.kg-now-play .kg-spin {
+  border-color: rgb(0 0 0 / 0.2);
+  border-top-color: #12141a;
+}
+
+/* The words: NetEase's own page (`.ne-lyrics`, netease.css), which is what both music apps show. It lives
+   inside `.ne-app` there; here the shell gives it that app's scope without its own ground. */
+.kg-now-words {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 58px 30px 30px 6px;
+}
+
+.kg-lyrics-shell.ne-app {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border-radius: 0;
+  color: #fff;
+  --ne-ink: #fff;
+  --ne-base: transparent;
+  --ne-on-colour: rgb(255 255 255 / 0.72);
+  --ne-lyric-dim: rgb(255 255 255 / 0.4);
+  --ne-lyric-now-dim: rgb(255 255 255 / 0.82);
+  --ne-lyric-sung: rgb(255 255 255 / 0.68);
+}
+
+.kg-app .kg-lyrics-shell.ne-app .ne-lyrics {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 6px 34cqh 2px;
+}
+
+.kg-app .kg-lyrics-shell.ne-app .ne-lyric {
+  font-size: calc(22px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.kg-lyrics-shell .ne-lyrics-card.note {
+  height: 100%;
+}
+
+.kg-lyrics-shell .ne-lyrics-card.note p {
+  font-size: var(--kg-type-label);
+}
+
+/* A short screen (the panel is as tall as the CarPlay area): the cover steps down so the words keep their room. */
+@container (max-height: 420px) {
+  .kg-now-left {
+    padding: 18px 18px;
+  }
+
+  .kg-now-cover {
+    width: min(200px, 58%);
+  }
+
+  .kg-now-name {
+    font-size: var(--kg-type-section);
+  }
+
+  .kg-now-wash {
+    background: radial-gradient(120% 90% at 20% 20%, rgb(12 14 20 / 0.6), rgb(6 8 12 / 0.9) 70%);
+  }
+}
+
+/* --- 扫码登录 (the top right's own) -------------------------------------------------------------------------- */
+
+.kg-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  height: 46px;
+  padding: 0 16px 0 12px;
+  margin-left: 12px;
+  border-radius: 999px;
+  background: var(--kg-raised);
+  color: var(--kg-dim);
+  white-space: nowrap;
+  transition: background var(--kg-quick) var(--kg-ease), color var(--kg-quick) var(--kg-ease);
+}
+
+.kg-account:hover {
+  background: var(--kg-blue-soft);
+  color: var(--kg-blue);
+}
+
+.kg-account.qr {
+  color: var(--kg-blue);
+  background: var(--kg-blue-soft);
+}
+
+.kg-account.on {
+  color: var(--kg-text);
+}
+
+.kg-account-name {
+  font-size: var(--kg-type-label);
+  font-weight: 650;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kg-account-face {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--kg-blue);
+  color: #fff;
+  font-size: var(--kg-type-caption);
+  font-weight: 700;
+}
+
+.kg-account-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The panel sits over the whole app (the words page is one, this is the other). */
+.kg-login {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: rgb(10 12 18 / 0.5);
+  backdrop-filter: blur(6px);
+}
+
+.kg-login-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: min(440px, 84%);
+  padding: 28px 28px 22px;
+  border-radius: 18px;
+  background: var(--kg-base);
+  color: var(--kg-text);
+  box-shadow: var(--kg-shadow);
+}
+
+.kg-login-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--kg-dim);
+}
+
+.kg-login-close:hover {
+  background: var(--kg-raised);
+  color: var(--kg-text);
+}
+
+.kg-login-title {
+  margin: 0;
+  font-size: var(--kg-type-section);
+  font-weight: 800;
+}
+
+.kg-login-qr {
+  display: grid;
+  place-items: center;
+  width: min(220px, 56%);
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  border: 1px solid var(--kg-line);
+  color: var(--kg-blue);
+  overflow: hidden;
+}
+
+.kg-login-qr img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.kg-login-note {
+  margin: 0;
+  font-size: var(--kg-type-label);
+  color: var(--kg-dim);
+  text-align: center;
+}
+
+.kg-login-note.warn {
+  color: #e0503c;
+}
+
+.kg-login-out {
+  font-size: var(--kg-type-small);
+  color: var(--kg-dim);
+  text-decoration: underline;
+}
+
+/* --- 听书's shelf ------------------------------------------------------------------------------------------- */
+
+.kg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kg-chip {
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--kg-raised);
+  color: var(--kg-dim);
+  font-size: var(--kg-type-small);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kg-chip:hover {
+  color: var(--kg-text);
+}
+
+.kg-chip.on {
+  background: var(--kg-blue-soft);
+  color: var(--kg-blue);
+  font-weight: 750;
+}
+
+.kg-book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: 20px 16px;
+}
+
+.kg-book {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kg-book-cover {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: var(--kg-corner-card);
+  overflow: hidden;
+  background: var(--kg-raised);
+  box-shadow: var(--kg-shadow);
+  transition: transform var(--kg-quick) var(--kg-ease);
+}
+
+.kg-book:hover .kg-book-cover {
+  transform: translateY(-2px);
+}
+
+.kg-book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kg-book-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kg-book-name {
+  font-size: var(--kg-type-body);
+  font-weight: 700;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kg-book-note {
+  font-size: var(--kg-type-caption);
+  color: var(--kg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- 我的收藏, before there is an account ------------------------------------------------------------------ */
+
+.kg-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 42px 24px;
+  border-radius: var(--kg-corner-card);
+  background: var(--kg-raised);
+  text-align: center;
+}
+
+.kg-gate-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--kg-blue-soft);
+  color: var(--kg-blue);
+}
+
+.kg-gate p {
+  margin: 0;
+  font-size: var(--kg-type-label);
+  color: var(--kg-dim);
+}
+
+/* 听书's tag row is long (24 categories): one line, scrolled sideways, rather than four lines of chips. */
+.kg-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+/* The words page is over the whole app now: a ground of its own, so the page under it never shows through. */
+.kg-now {
+  background: #0b0d12;
+}
+
+.kg-app .kg-now-wash {
+  background: radial-gradient(120% 90% at 20% 20%, rgb(12 14 20 / 0.78), rgb(6 8 12 / 0.97) 68%);
+}
+
+/* The page's own buttons out-specify `.kg-app button` (which strips colour): these keep their blue. */
+.kg-app .kg-play-all {
+  background: var(--kg-blue);
+  color: #fff;
+  font-weight: 700;
+}
+
+.kg-app .kg-play-all:hover {
+  filter: brightness(1.08);
+}
+
+.kg-gate .kg-play-all {
+  margin-top: 4px;
+}
+
+.kg-gate-mark svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* The words page's volume, under the transport: the app's own, as its bar never had one. */
+.kg-now-volume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.kg-now-speaker {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  color: rgb(255 255 255 / 0.72);
+}
+
+.kg-now-speaker:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.1);
+}
+
+.kg-now-volume input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  margin: 0;
+  accent-color: #7cc0ff;
+  cursor: pointer;
+}
+
+.kg-now-volume-num {
+  flex: none;
+  width: 44px;
+  text-align: right;
+  font-size: var(--kg-type-small);
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 0.66);
+}
+
+/* A playlist's own cover is square, as the client's are; its name's first letter stands in when it has none. */
+.kg-card-cover-square {
+  aspect-ratio: 1 / 1;
+}
+
+.kg-card-cover-square .kg-blank-letter {
+  font-size: var(--kg-type-section);
+}
