@@ -1,10 +1,12 @@
 import type maplibregl from 'maplibre-gl'
 import type { CustomLayerInterface, CustomRenderMethodInput } from 'maplibre-gl'
 import type { Appearance } from '../state/appearance'
-import { METRES_PER_DEGREE } from './projection'
+import { METRES_PER_DEGREE, pixelsPerMetre } from './projection'
 import type { RaisedLine, SurfaceAt } from './route'
+import { arrowStrips } from './routeArrow'
 import {
   ACTIVE_ROUTE_LOWEST_LAYER,
+  NO_ENTRY_LAYER,
   OVER_ROUTE_LAYER,
   ROUTE_CASING_WIDTH,
   ROUTE_LOWEST_LAYER,
@@ -219,6 +221,7 @@ function linked(gl: WebGLRenderingContext | WebGL2RenderingContext, vertex: stri
     gl.shaderSource(shader, text)
     gl.compileShader(shader)
     gl.attachShader(program, shader)
+    gl.deleteShader(shader)
   }
   gl.linkProgram(program)
   return program
@@ -237,6 +240,116 @@ function overTheMap(gl: WebGL2RenderingContext) {
   gl.enable(gl.DEPTH_TEST)
   gl.depthFunc(gl.LEQUAL)
   gl.depthMask(false)
+}
+
+/** How much of its height a raised road (and the guidance on it) has at this zoom. */
+function riseAt(zoom: number): number {
+  return Math.min(Math.max((zoom - RISE_ZOOMS[0]) / (RISE_ZOOMS[1] - RISE_ZOOMS[0]), 0), 1)
+}
+
+const ARROW_VERTEX_SHADER = `#version 300 es
+uniform mat4 u_matrix;
+uniform float u_rise;
+in vec3 a_point;
+void main() {
+  float height = a_point.z * u_rise + (a_point.z > 0.0 ? ${ROUTE_ABOVE} : 0.0);
+  gl_Position = u_matrix * vec4(a_point.xy, height * ${METRE}, 1.0);
+}`
+
+const ARROW_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+uniform vec3 u_colour;
+out vec4 colour;
+void main() { colour = vec4(u_colour, 1.0); }
+`
+
+/** Draws a single route arrow over the route and traffic, whether or not the map has raised road tiles. */
+export function routeArrowLayer(map: maplibregl.Map, appearance: () => Appearance): (line: RaisedLine | null) => void {
+  let line: RaisedLine | null = null
+  let zoomForMesh: number | null = null
+  let origin: [number, number] = [0, 0]
+  let counts: [number, number] = [0, 0]
+  let graphics: {
+    program: WebGLProgram
+    array: WebGLVertexArrayObject
+    buffer: WebGLBuffer
+    uniforms: ReturnType<typeof locations>
+  } | null = null
+
+  const layer: CustomLayerInterface = {
+    id: 'route-maneuver-arrow',
+    type: 'custom',
+    renderingMode: '3d',
+    onAdd(_, raw) {
+      const gl = raw as WebGL2RenderingContext
+      const program = linked(gl, ARROW_VERTEX_SHADER, ARROW_FRAGMENT_SHADER)
+      const array = gl.createVertexArray()
+      const buffer = gl.createBuffer()
+      gl.bindVertexArray(array)
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+      const point = gl.getAttribLocation(program, 'a_point')
+      gl.enableVertexAttribArray(point)
+      gl.vertexAttribPointer(point, 3, gl.FLOAT, false, 0, 0)
+      gl.bindVertexArray(null)
+      graphics = { program, array, buffer, uniforms: locations(gl, program, ['u_matrix', 'u_rise', 'u_colour']) }
+      zoomForMesh = null
+    },
+    render(raw, args) {
+      if (!line || !graphics) return
+      const gl = raw as WebGL2RenderingContext
+      const zoom = map.getZoom()
+      const meshZoom = Math.round(zoom * 8) / 8
+      if (zoomForMesh !== meshZoom) {
+        const mesh = arrowStrips(line, routeWidth(meshZoom) / pixelsPerMetre(meshZoom))
+        if (!mesh) return
+        const [x, y] = worldOf(line[0][0], line[0][1])
+        origin = [x * TILES, y * TILES]
+        const data = new Float32Array(
+          [...mesh.casing, ...mesh.fill].flatMap(([x, z, height]) => {
+            const [wx, wy] = worldOf(x, z)
+            return [wx * TILES - origin[0], wy * TILES - origin[1], height]
+          }),
+        )
+        gl.bindBuffer(gl.ARRAY_BUFFER, graphics.buffer)
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+        counts = [mesh.casing.length, mesh.fill.length]
+        zoomForMesh = meshZoom
+      }
+      const { array, program, uniforms } = graphics
+      gl.useProgram(program)
+      gl.uniformMatrix4fv(uniforms.u_matrix, false, matrixFrom(args.defaultProjectionData.mainMatrix, ...origin))
+      gl.uniform1f(uniforms.u_rise, riseAt(zoom))
+      gl.bindVertexArray(array)
+      overTheMap(gl)
+      gl.uniform3fv(uniforms.u_colour, routeColours(appearance()).casing)
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, counts[0])
+      gl.uniform3f(uniforms.u_colour, 1, 1, 1)
+      gl.drawArrays(gl.TRIANGLE_STRIP, counts[0], counts[1])
+      gl.bindVertexArray(null)
+    },
+    onRemove(_, raw) {
+      if (!graphics) return
+      const gl = raw as WebGL2RenderingContext
+      gl.deleteVertexArray(graphics.array)
+      gl.deleteBuffer(graphics.buffer)
+      gl.deleteProgram(graphics.program)
+      graphics = null
+    },
+  }
+  map.on('style.load', () => map.addLayer(layer, NO_ENTRY_LAYER))
+  return (next) => {
+    if (
+      line === next ||
+      (line &&
+        next &&
+        line.length === next.length &&
+        line.every(([x, z, height], i) => x === next[i][0] && z === next[i][1] && height === next[i][2]))
+    )
+      return
+    line = next
+    zoomForMesh = null
+    map.triggerRepaint()
+  }
 }
 
 /** The surfaces of a tile by cell. */
@@ -405,11 +518,6 @@ export function raisedRoads(map: maplibregl.Map, address: string, appearance: ()
         shown.push(tile)
     }
     return shown
-  }
-
-  /** How much of its height a raised road has at this zoom. */
-  function riseAt(zoom: number): number {
-    return Math.min(Math.max((zoom - RISE_ZOOMS[0]) / (RISE_ZOOMS[1] - RISE_ZOOMS[0]), 0), 1)
   }
 
   function screenLift(x: number, z: number, height: number): [number, number] {

@@ -878,6 +878,7 @@ function signLayer(): LayerSpecification {
 
 /** The zoom no-entry signs show from (the tiles have them a step earlier, crates/mapdata area.rs NO_ENTRY_ZOOM). */
 const NO_ENTRY_MIN_ZOOM = 15
+export const NO_ENTRY_LAYER = 'no-entry'
 
 /**
  * A no-entry sign at the entrance of each road the game leaves off its own map (crates/mapdata no_entry.rs; owner
@@ -885,7 +886,7 @@ const NO_ENTRY_MIN_ZOOM = 15
  */
 function noEntryLayer(): LayerSpecification {
   return {
-    id: 'no-entry',
+    id: NO_ENTRY_LAYER,
     type: 'symbol',
     source: MAP_SOURCE,
     'source-layer': 'no_entry',
